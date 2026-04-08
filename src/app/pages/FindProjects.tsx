@@ -4,6 +4,7 @@ import { Header } from "../components/Header";
 import { Search, ChevronDown, MapPin, Bookmark, TrendingUp, X } from "lucide-react";
 import imgRobot from "../../assets/0dd2934842d6fa9897708ea0e164b300c59f584e.png";
 import { MatchExplanation } from "../components/MatchExplanation";
+import { ContactModal } from "../components/ContactModal";
 
 interface Project {
   id: string;
@@ -13,6 +14,8 @@ interface Project {
   description: string;
   tags: string[];
   highlightTag: string;
+  piName: string;
+  piEmail: string;
   image?: string;
   matchPercentage: number;
 }
@@ -26,6 +29,20 @@ export default function FindProjects() {
   const [selectedProximity, setSelectedProximity] = useState("");
   const [showMatchExplanation, setShowMatchExplanation] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [contactProject, setContactProject] = useState<Project | null>(null);
+  const [followedIds, setFollowedIds] = useState<string[]>(() =>
+    JSON.parse(localStorage.getItem("followedProjects") || "[]")
+  );
+
+  const handleStayUpdated = (project: Project) => {
+    setFollowedIds(prev => {
+      const updated = prev.includes(project.id)
+        ? prev.filter(id => id !== project.id)
+        : [...prev, project.id];
+      localStorage.setItem("followedProjects", JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const projects: Project[] = [
     {
@@ -36,6 +53,8 @@ export default function FindProjects() {
       description: "Burnout Prevention is an ongoing research project led by Dr. Susan Stern at University Hospitals Cleveland in conjunction with the Cleveland Institute of Art to develop digital tools to aid caregivers.",
       tags: ["Robotics", "Human-Robot Interaction", "Surgery Assistance"],
       highlightTag: "Human-Robot Interaction",
+      piName: "Dr. Susan Stern",
+      piEmail: "sstern@uhcleveland.edu",
       matchPercentage: 30,
     },
     {
@@ -46,6 +65,8 @@ export default function FindProjects() {
       description: "Automated suturing research combining robotics and computer vision to assist in minimally invasive procedures.",
       tags: ["Robotics", "Computer Vision", "Medical Devices"],
       highlightTag: "Robotics",
+      piName: "Dr. Rachel Kim",
+      piEmail: "rkim@cwru.edu",
       matchPercentage: 68,
     },
     {
@@ -57,6 +78,8 @@ export default function FindProjects() {
       tags: ["Robotics", "Human-Robot Interaction", "Surgery Assistance"],
       highlightTag: "Human-Robot Interaction",
       image: imgRobot,
+      piName: "Dr. Bryan Carroll",
+      piEmail: "bcarroll@uhcleveland.edu",
       matchPercentage: 87,
     },
     {
@@ -67,6 +90,8 @@ export default function FindProjects() {
       description: "AI-powered surgical assistance platform that enhances precision and reduces operation time through real-time analytics and decision support.",
       tags: ["AI/ML", "Surgery Assistance", "Medical Devices"],
       highlightTag: "Surgery Assistance",
+      piName: "Dr. Angela Foster",
+      piEmail: "afoster@clevelandclinic.org",
       matchPercentage: 72,
     },
   ];
@@ -352,10 +377,20 @@ export default function FindProjects() {
                       >
                         View Project
                       </Link>
-                      <button className="px-4 py-2 text-[13px] font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors">
-                        Stay Updated
+                      <button
+                        onClick={() => handleStayUpdated(project)}
+                        className={`px-4 py-2 text-[13px] font-medium rounded-md border transition-colors ${
+                          followedIds.includes(project.id)
+                            ? "text-green-700 bg-green-50 border-green-300"
+                            : "text-gray-700 bg-white border-gray-300 hover:bg-gray-50"
+                        }`}
+                      >
+                        {followedIds.includes(project.id) ? "Following" : "Stay Updated"}
                       </button>
-                      <button className="px-4 py-2 text-[13px] font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors">
+                      <button
+                        onClick={() => setContactProject(project)}
+                        className="px-4 py-2 text-[13px] font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors"
+                      >
                         Contact PI
                       </button>
                     </div>
@@ -368,6 +403,14 @@ export default function FindProjects() {
       </main>
 
       {/* Match Explanation Modal */}
+      {contactProject && (
+        <ContactModal
+          recipientName={contactProject.piName}
+          recipientEmail={contactProject.piEmail}
+          onClose={() => setContactProject(null)}
+        />
+      )}
+
       {showMatchExplanation && selectedProject && (
         <MatchExplanation
           matchPercentage={selectedProject.matchPercentage}

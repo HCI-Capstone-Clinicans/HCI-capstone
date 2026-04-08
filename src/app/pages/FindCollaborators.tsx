@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { Header } from "../components/Header";
-import { Search, Filter, SlidersHorizontal, UserCircle2, TrendingUp } from "lucide-react";
+import { Search, SlidersHorizontal, UserCircle2, TrendingUp } from "lucide-react";
 import { MatchExplanation } from "../components/MatchExplanation";
+import { ContactModal } from "../components/ContactModal";
 import { Link } from "react-router";
 
 export default function FindCollaborators() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showMatchExplanation, setShowMatchExplanation] = useState(false);
   const [selectedCollab, setSelectedCollab] = useState<any>(null);
+  const [contactCollab, setContactCollab] = useState<any>(null);
   
   const collaborators = [
     {
@@ -15,6 +17,7 @@ export default function FindCollaborators() {
       role: "Clinical Researcher",
       organization: "Clinical Research Manager at UPMC",
       contact: "ericsh@upmc.org | 555-555-5555",
+      email: "ericsh@upmc.org",
       pastProjects: ["Hallway Design for EDs", "Trauma Room Design"],
       skills: ["Research Ops", "User Research", "Grant Writing", "Team Management", "Microsoft Office"],
       interests: ["Human-robot interaction", "Human-centered design", "Product design", "Sustainability", "User research"],
@@ -27,6 +30,7 @@ export default function FindCollaborators() {
       role: "Service Designer",
       organization: "Service Designer at Pittsburgh International Airport",
       contact: "jd@pit.com | 555-555-5555",
+      email: "jd@pit.com",
       pastProjects: ["Check-in Robotics", "TSA Kiosk"],
       skills: ["Service Design", "User Research", "UX Prototyping", "Rapid Prototyping", "Product Design"],
       interests: ["Human-robot interaction", "Human-centered design", "Product design", "Sustainability", "User research"],
@@ -39,6 +43,7 @@ export default function FindCollaborators() {
       role: "UX Researcher and Designer",
       organization: "UX Research Manager at Philips Medical",
       contact: "js@pm.com | 555-555-5555",
+      email: "js@pm.com",
       pastProjects: ["Surgical Robot Research", "Operating Room Design"],
       skills: ["Service Design", "User Research", "UX Prototyping", "Rapid Prototyping", "Product Design"],
       interests: ["Human-robot interaction", "Human-centered design", "Product design", "Sustainability", "User research"],
@@ -249,7 +254,10 @@ export default function FindCollaborators() {
 
                     {/* Actions */}
                     <div className="flex gap-2 pt-2">
-                      <button className="px-4 py-2 text-[13px] font-medium text-white bg-gray-900 hover:bg-gray-800 rounded-md transition-colors">
+                      <button
+                        onClick={() => setContactCollab(collab)}
+                        className="px-4 py-2 text-[13px] font-medium text-white bg-gray-900 hover:bg-gray-800 rounded-md transition-colors"
+                      >
                         Contact
                       </button>
                       <Link to={`/profile/${collab.name.replace(/\s+/g, '-').toLowerCase()}`}>
@@ -268,6 +276,15 @@ export default function FindCollaborators() {
           </div>
         </div>
       </main>
+
+      {/* Contact Modal */}
+      {contactCollab && (
+        <ContactModal
+          recipientName={contactCollab.name}
+          recipientEmail={contactCollab.email}
+          onClose={() => setContactCollab(null)}
+        />
+      )}
 
       {/* Match Explanation Modal */}
       {showMatchExplanation && selectedCollab && (
