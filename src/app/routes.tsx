@@ -7,7 +7,13 @@ import MyProjects from "./pages/MyProjects";
 import SkillsMap from "./pages/SkillsMap";
 import ProfileView from "./pages/ProfileView";
 import OrcidSearch from "./pages/OrcidSearch";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Onboarding from "./pages/Onboarding";
+import { AuthGuard } from "./components/AuthGuard";
+
 export const router = createBrowserRouter([
+  // Public routes
   {
     path: "/",
     element: <FindProjects />,
@@ -32,16 +38,46 @@ export const router = createBrowserRouter([
     path: "/profile/:id",
     element: <ProfileView />,
   },
+  // Auth routes
+  {
+    path: "/login",
+    element: <Login />,
+  },
+  {
+    path: "/register",
+    element: <Register />,
+  },
+  {
+    path: "/onboarding",
+    element: (
+      <AuthGuard>
+        <Onboarding />
+      </AuthGuard>
+    ),
+  },
+  // Protected routes
   {
     path: "/my-profile",
-    element: <MyProfile />,
+    element: (
+      <AuthGuard>
+        <MyProfile />
+      </AuthGuard>
+    ),
   },
   {
     path: "/my-projects",
-    element: <MyProjects />,
+    element: (
+      <AuthGuard>
+        <MyProjects />
+      </AuthGuard>
+    ),
   },
+<<<<<<< HEAD
   {
     path: "/orcid-search",
     element: <OrcidSearch />,
   },
 ]);
+=======
+]);
+>>>>>>> e1c0bc5 (basic sign-in, registration w/ supabase backend; need to fix onboarding)
