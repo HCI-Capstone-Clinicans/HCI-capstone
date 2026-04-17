@@ -1,9 +1,12 @@
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { Users } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 export function Header() {
   const location = useLocation();
-  
+  const navigate = useNavigate();
+  const { session, signOut } = useAuth();
+
   const isActive = (path: string) => {
     if (path === '/find-projects') {
       return location.pathname === '/' || location.pathname === '/find-projects';
@@ -17,7 +20,12 @@ export function Header() {
 
     return location.pathname === path;
   };
-  
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-gray-200 bg-white">
       <div className="flex h-14 items-center justify-between px-6">
@@ -27,7 +35,7 @@ export function Header() {
           </div>
           <span className="text-[15px] font-semibold text-gray-900">Clinician Connect</span>
         </Link>
-        
+
         <nav className="flex items-center gap-1">
           <Link
             to="/find-collaborators"
@@ -61,13 +69,40 @@ export function Header() {
           </Link>
 
         </nav>
-        
-        <Link
-          to="/my-profile"
-          className="px-3 py-1.5 text-[13px] font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-        >
-          My Profile
-        </Link>
+
+        <div className="flex items-center gap-2">
+          {session ? (
+            <>
+              <Link
+                to="/my-profile"
+                className="px-3 py-1.5 text-[13px] font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              >
+                My Profile
+              </Link>
+              <button
+                onClick={handleSignOut}
+                className="px-3 py-1.5 text-[13px] font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="px-3 py-1.5 text-[13px] font-medium text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
+              >
+                Sign in
+              </Link>
+              <Link
+                to="/register"
+                className="px-3 py-1.5 text-[13px] font-medium text-white bg-gray-900 hover:bg-gray-800 rounded-md transition-colors"
+              >
+                Register
+              </Link>
+            </>
+          )}
+        </div>
       </div>
     </header>
   );
