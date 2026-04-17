@@ -2,7 +2,7 @@ import { Navigate, useLocation } from "react-router";
 import { useAuth } from "../context/AuthContext";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { session, profile, loading } = useAuth();
+  const { session, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -15,11 +15,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (!session) {
     return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  // Redirect to onboarding if not yet completed
-  if (profile && !profile.onboarding_complete && location.pathname !== "/onboarding") {
-    return <Navigate to="/onboarding" replace />;
   }
 
   return <>{children}</>;
