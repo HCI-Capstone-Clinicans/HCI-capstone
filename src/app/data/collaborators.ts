@@ -17,6 +17,7 @@ export interface Collaborator {
   workingStyle: string[];
   constraints: string[];
   collaborationType: string[];
+  preferredOrgType: string[];
   matchScore?: number;
 }
 
@@ -186,6 +187,17 @@ const collaborationTypes = [
   'Long-term partnership'
 ];
 
+const preferredOrgTypes = [
+  'Academic Medical Center',
+  'Hospital System',
+  'Research Institute',
+  'Startup / Industry',
+  'Nonprofit / NGO',
+  'Government / VA',
+  'University / Academia',
+  'Any setting'
+];
+
 const availabilities = ['flexible', 'part-time', 'limited', 'full-time'];
 
 const institutions = [
@@ -279,7 +291,8 @@ function generateCollaborator(index: number): Collaborator {
     projectStage: randomPick(projectStages, Math.floor(Math.random() * 2) + 1),
     workingStyle: randomPick(workingStyles, Math.floor(Math.random() * 2) + 1),
     constraints: randomPick(constraints, Math.floor(Math.random() * 2) + 1),
-    collaborationType: randomPick(collaborationTypes, Math.floor(Math.random() * 3) + 2)
+    collaborationType: randomPick(collaborationTypes, Math.floor(Math.random() * 3) + 2),
+    preferredOrgType: randomPick(preferredOrgTypes, Math.floor(Math.random() * 2) + 1)
   };
 }
 

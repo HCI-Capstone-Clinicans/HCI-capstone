@@ -14,9 +14,7 @@ export function Header() {
     if (path === '/my-projects') {
       return location.pathname === '/my-projects';
     }
-    if (path === '/orcid-search') {
-      return location.pathname === '/orcid-search';
-    }
+
     return location.pathname === path;
   };
   
@@ -61,16 +59,7 @@ export function Header() {
           >
             My Projects
           </Link>
-          <Link
-            to="/orcid-search"
-            className={`px-3 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
-              isActive('/orcid-search')
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-            }`}
-          >
-            ORCID Search
-          </Link>
+
         </nav>
         
         <Link

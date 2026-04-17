@@ -10,7 +10,7 @@ import {
   Sparkles,
   SlidersHorizontal,
   Target,
-  Clock,
+
   MapPin,
   Navigation,
   ChevronDown,
@@ -508,20 +508,14 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
                         </p>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-1">
-                      {collab.topicAreas.slice(0, 2).map((topic, idx) => (
-                        <span
-                          key={idx}
-                          className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded-md"
-                        >
-                          {topic}
-                        </span>
-                      ))}
-                      {collab.topicAreas.length > 2 && (
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-md">
-                          +{collab.topicAreas.length - 2}
-                        </span>
-                      )}
+                    <div className="space-y-1.5">
+                      <CardTagRow label="Role" color="blue" values={[collab.role.charAt(0).toUpperCase() + collab.role.slice(1)]} />
+                      <CardTagRow label="Reasons" color="purple" values={collab.collaborationIntent} max={1} />
+                      <CardTagRow label="Interests" color="gray" values={collab.topicAreas} max={2} />
+                      <CardTagRow label="Skills" color="orange" values={collab.skills} max={2} />
+                      <CardTagRow label="Location" color="teal" values={[collab.institution]} max={1} />
+                      <CardTagRow label="Availability" color="green" values={[collab.availability.charAt(0).toUpperCase() + collab.availability.slice(1).replace(/-/g, ' ')]} />
+                      <CardTagRow label="Pref. Org" color="rose" values={collab.preferredOrgType} max={1} />
                     </div>
                   </motion.button>
                 ))}
@@ -848,42 +842,42 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
                   </p>
                 </div>
 
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-2">Topic Areas</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedCollaborator.topicAreas.map((topic, idx) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-md"
-                      >
-                        {topic}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-2">Skills</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedCollaborator.skills.map((skill, idx) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-md"
-                      >
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-gray-500" />
-                  <div>
-                    <div className="text-xs text-gray-500 mb-0.5">Availability</div>
-                    <div className="text-sm font-medium text-gray-900">
-                      {selectedCollaborator.availability.charAt(0).toUpperCase() + selectedCollaborator.availability.slice(1).replace('-', ' ')}
-                    </div>
-                  </div>
+                <div className="space-y-4 mb-6">
+                  <DetailTagSection
+                    label="Role"
+                    color="blue"
+                    values={[selectedCollaborator.role.charAt(0).toUpperCase() + selectedCollaborator.role.slice(1)]}
+                  />
+                  <DetailTagSection
+                    label="Reasons"
+                    color="purple"
+                    values={selectedCollaborator.collaborationIntent}
+                  />
+                  <DetailTagSection
+                    label="Interests"
+                    color="gray"
+                    values={selectedCollaborator.topicAreas}
+                  />
+                  <DetailTagSection
+                    label="Skills"
+                    color="orange"
+                    values={selectedCollaborator.skills}
+                  />
+                  <DetailTagSection
+                    label="Location"
+                    color="teal"
+                    values={[selectedCollaborator.institution]}
+                  />
+                  <DetailTagSection
+                    label="Availability"
+                    color="green"
+                    values={[selectedCollaborator.availability.charAt(0).toUpperCase() + selectedCollaborator.availability.slice(1).replace(/-/g, ' ')]}
+                  />
+                  <DetailTagSection
+                    label="Preference of Org"
+                    color="rose"
+                    values={selectedCollaborator.preferredOrgType}
+                  />
                 </div>
 
                 <div className="space-y-3">
@@ -918,6 +912,77 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// --- Tag color maps ---
+type TagColor = 'blue' | 'purple' | 'gray' | 'orange' | 'teal' | 'green' | 'rose';
+
+const tagLabelColors: Record<TagColor, string> = {
+  blue:   'text-blue-600',
+  purple: 'text-purple-600',
+  gray:   'text-gray-500',
+  orange: 'text-orange-600',
+  teal:   'text-teal-600',
+  green:  'text-green-600',
+  rose:   'text-rose-600',
+};
+
+const tagChipColors: Record<TagColor, string> = {
+  blue:   'bg-blue-50 text-blue-700',
+  purple: 'bg-purple-50 text-purple-700',
+  gray:   'bg-gray-100 text-gray-700',
+  orange: 'bg-orange-50 text-orange-700',
+  teal:   'bg-teal-50 text-teal-700',
+  green:  'bg-green-50 text-green-700',
+  rose:   'bg-rose-50 text-rose-700',
+};
+
+// Compact row used inside result list cards
+function CardTagRow({ label, color, values, max = 2 }: {
+  label: string;
+  color: TagColor;
+  values: string[];
+  max?: number;
+}) {
+  const shown = values.slice(0, max);
+  const overflow = values.length - max;
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <span className={`text-[10px] font-semibold uppercase tracking-wide w-16 shrink-0 ${tagLabelColors[color]}`}>
+        {label}
+      </span>
+      {shown.map((v, i) => (
+        <span key={i} className={`px-1.5 py-0.5 text-[10px] rounded ${tagChipColors[color]}`}>
+          {v}
+        </span>
+      ))}
+      {overflow > 0 && (
+        <span className="text-[10px] text-gray-400">+{overflow}</span>
+      )}
+    </div>
+  );
+}
+
+// Full tag section used in the detail panel
+function DetailTagSection({ label, color, values }: {
+  label: string;
+  color: TagColor;
+  values: string[];
+}) {
+  return (
+    <div>
+      <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1.5 ${tagLabelColors[color]}`}>
+        {label}
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {values.map((v, i) => (
+          <span key={i} className={`px-2.5 py-1 text-xs rounded-md ${tagChipColors[color]}`}>
+            {v}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

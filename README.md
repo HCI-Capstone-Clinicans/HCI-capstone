@@ -33,3 +33,6 @@
   ```
 
   
+cd ~/HCI-Capstone
+git remote set-url origin https://andrewchan-geminiAPI@github.com/andrewchan-geminiAPI/HCI-capstone.git
+git push origin merged-onboarding-process
