@@ -72,12 +72,8 @@ export const router = createBrowserRouter([
       </AuthGuard>
     ),
   },
-<<<<<<< HEAD
   {
     path: "/orcid-search",
     element: <OrcidSearch />,
   },
 ]);
-=======
-]);
->>>>>>> e1c0bc5 (basic sign-in, registration w/ supabase backend; need to fix onboarding)
