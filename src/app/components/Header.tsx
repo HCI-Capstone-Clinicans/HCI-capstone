@@ -1,23 +1,21 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import { Users } from "lucide-react";
+import { Users, ShieldCheck } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 export function Header() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { session, signOut } = useAuth();
+  const { session, profile, signOut } = useAuth();
+
+  const userRole = profile?.user_role ?? "general_user";
+  const isAdmin = userRole === "admin";
+  const isFacultyOrAdmin = userRole === "faculty" || userRole === "admin";
 
   const isActive = (path: string) => {
     if (path === '/find-projects') {
       return location.pathname === '/' || location.pathname === '/find-projects';
     }
-    if (path === '/find-collaborators') {
-      return location.pathname === '/find-collaborators';
-    }
-    if (path === '/my-projects') {
-      return location.pathname === '/my-projects';
-    }
-
+    if (path === '/orcid-search') return location.pathname === '/orcid-search';
     return location.pathname === path;
   };
 
@@ -40,9 +38,7 @@ export function Header() {
           <Link
             to="/find-collaborators"
             className={`px-3 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
-              isActive('/find-collaborators')
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              isActive('/find-collaborators') ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
             Find Collaborators
@@ -50,29 +46,50 @@ export function Header() {
           <Link
             to="/find-projects"
             className={`px-3 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
-              isActive('/find-projects')
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              isActive('/find-projects') ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
             Find Projects
           </Link>
+          {session && (
+            <Link
+              to="/my-projects"
+              className={`px-3 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
+                isActive('/my-projects') ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              My Projects
+            </Link>
+          )}
           <Link
-            to="/my-projects"
+            to="/orcid-search"
             className={`px-3 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
-              isActive('/my-projects')
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              isActive('/orcid-search') ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            My Projects
+            ORCID Search
           </Link>
-
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
+                isActive('/admin') ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Admin
+            </Link>
+          )}
         </nav>
 
         <div className="flex items-center gap-2">
           {session ? (
             <>
+              {isFacultyOrAdmin && (
+                <span className="px-2 py-0.5 text-[11px] font-medium text-gray-500 bg-gray-100 rounded-full capitalize">
+                  {userRole}
+                </span>
+              )}
               <Link
                 to="/my-profile"
                 className="px-3 py-1.5 text-[13px] font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
