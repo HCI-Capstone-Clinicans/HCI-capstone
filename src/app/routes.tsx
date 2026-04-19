@@ -11,7 +11,8 @@ import Register from "./pages/Register";
 import Onboarding from "./pages/Onboarding";
 import { AuthGuard } from "./components/AuthGuard";
 
-export const router = createBrowserRouter([
+export const router = createBrowserRouter(
+  [
   // Public routes
   {
     path: "/",
@@ -71,4 +72,6 @@ export const router = createBrowserRouter([
       </AuthGuard>
     ),
   },
-]);
+],
+  { basename: import.meta.env.BASE_URL }
+);

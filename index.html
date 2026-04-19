@@ -5,6 +5,22 @@
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>Enhance UI for Modern SaaS</title>
+    <script>
+      // Restore path redirected by 404.html
+      (function() {
+        var p = window.location.search.match(/[?&]p=([^&]*)/);
+        if (p) {
+          var q = window.location.search.match(/[?&]q=([^&]*)/);
+          window.history.replaceState(
+            null, null,
+            window.location.pathname.slice(0, -1) +
+            decodeURIComponent(p[1]).replace(/~and~/g, '&') +
+            (q ? '?' + decodeURIComponent(q[1]).replace(/~and~/g, '&') : '') +
+            window.location.hash
+          );
+        }
+      })();
+    </script>
     </head>
 
     <body>
