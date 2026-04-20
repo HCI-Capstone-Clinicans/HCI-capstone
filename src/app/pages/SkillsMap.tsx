@@ -1,85 +1,117 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import imgCarrollLabs from "../../assets/783f2c42ea769440e177775b6794f454354e65fd.png";
-import { Link, useNavigate, useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { Header } from "../components/Header";
 import { ArrowLeft, MapPin, TrendingUp } from "lucide-react";
 import { VennDiagram4People } from "../components/VennDiagram4People";
 import { VennDiagram5People } from "../components/VennDiagram5People";
-import { VennDiagramDetailed } from "../components/VennDiagramDetailed";
 import { MatchExplanation } from "../components/MatchExplanation";
 import { MatchedTag } from "../components/MatchedTag";
+
+const MIN_SCALE = 1.0;
+const MAX_SCALE = 3.0;
 
 export default function SkillsMap() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [zoom, setZoom] = useState(0);
+  const [scale, setScale] = useState(1.0);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [showYou, setShowYou] = useState(false);
   const [showMatchExplanation, setShowMatchExplanation] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
-  const teamMembers = [
-    {
-      id: "andrew",
-      name: "Andrew Chan",
-      role: "HCI Researcher",
-      skills: ["Service Design"],
-      position: showYou ? { x: 150, y: 550 } : { x: 190, y: 380 },
-      color: "cyan",
-    },
-    {
-      id: "daniel",
-      name: "Daniel Kim",
-      role: "Robotics Engineer",
-      skills: ["Mechanical Engineering", "Electronics Engineering"],
-      position: showYou ? { x: 450, y: 400 } : { x: 534, y: 230 },
-      color: "green",
-    },
-    {
-      id: "maya",
-      name: "Dr. Maya Patel",
-      role: "Clinician Support",
-      skills: ["Research Operations"],
-      position: showYou ? { x: 350, y: 650 } : { x: 489, y: 550 },
-      color: "yellow",
-    },
-    {
-      id: "bryan",
-      name: "Dr. Bryan Carroll",
-      role: "Dermatologic Surgeon",
-      skills: ["Surgery"],
-      position: showYou ? { x: 450, y: 850 } : { x: 555, y: 850 },
-      color: "rose",
-    },
-  ];
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scaleRef = useRef(1.0);
+  const panRef = useRef({ x: 0, y: 0 });
+  const dragging = useRef(false);
+  const lastPos = useRef({ x: 0, y: 0 });
 
-  const sharedSkills = showYou
-    ? [
-        { name: "Human-Robot Interaction", position: { x: 340, y: 480 }, size: "sm" },
-        { name: "Design Thinking", position: { x: 380, y: 560 }, size: "xs" },
-        { name: "Quantitative Research", position: { x: 440, y: 580 }, size: "sm" },
-        { name: "UX Writing", position: { x: 280, y: 630 }, size: "sm" },
-        { name: "Medicine", position: { x: 400, y: 730 }, size: "sm" },
-      ]
-    : [
-        { name: "Human-Robot Interaction", position: { x: 371, y: 360 }, size: "sm" },
-        { name: "Design Thinking", position: { x: 342, y: 420 }, size: "xs" },
-        { name: "Quantitative Research", position: { x: 474, y: 450 }, size: "sm" },
-        { name: "UX Writing", position: { x: 361, y: 490 }, size: "sm" },
-        { name: "Medicine", position: { x: 517, y: 700 }, size: "sm" },
-      ];
+  // Keep refs in sync with state
+  scaleRef.current = scale;
+  panRef.current = pan;
 
-  const youSkills = [
-    { name: "Product Design", position: { x: 320, y: 420 }, size: "sm" },
-    { name: "Visual Design", position: { x: 250, y: 500 }, size: "sm" },
-    { name: "Product Development", position: { x: 410, y: 450 }, size: "sm" },
-  ];
+  const zoomPercent = Math.round((scale - 1) * 100);
 
-  const handleZoomIn = () => setZoom(Math.min(zoom + 20, 100));
-  const handleZoomOut = () => setZoom(Math.max(zoom - 20, 0));
+  const handleZoomIn = () => {
+    const s = scaleRef.current;
+    const p = panRef.current;
+    const newScale = Math.min(s + 0.1, MAX_SCALE);
+    const ratio = newScale / s;
+    setScale(newScale);
+    setPan({ x: p.x * ratio, y: p.y * ratio });
+  };
 
-  const getSkillSize = (size: string) => {
-    if (size === "xs") return "text-[10px] px-2 py-1";
-    if (size === "sm") return "text-[11px] px-2.5 py-1.5";
-    return "text-[12px] px-3 py-2";
+  const handleZoomOut = () => {
+    const s = scaleRef.current;
+    const p = panRef.current;
+    const newScale = Math.max(s - 0.1, MIN_SCALE);
+    if (newScale <= MIN_SCALE) {
+      setScale(MIN_SCALE);
+      setPan({ x: 0, y: 0 });
+      return;
+    }
+    const ratio = newScale / s;
+    setScale(newScale);
+    setPan({ x: p.x * ratio, y: p.y * ratio });
+  };
+
+  // Wheel zoom toward cursor
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const W = rect.width;
+      const H = rect.height;
+      // cursor position relative to container center
+      const ecx = e.clientX - rect.left - W / 2;
+      const ecy = e.clientY - rect.top - H / 2;
+
+      const s = scaleRef.current;
+      const p = panRef.current;
+
+      const delta = -e.deltaY * 0.001;
+      const factor = Math.exp(delta);
+      const newScale = Math.min(Math.max(s * factor, MIN_SCALE), MAX_SCALE);
+      const ratio = newScale / s;
+
+      setScale(newScale);
+      setPan({
+        x: ecx * (1 - ratio) + p.x * ratio,
+        y: ecy * (1 - ratio) + p.y * ratio,
+      });
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    dragging.current = true;
+    setIsDragging(true);
+    lastPos.current = { x: e.clientX, y: e.clientY };
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragging.current) return;
+    const dx = e.clientX - lastPos.current.x;
+    const dy = e.clientY - lastPos.current.y;
+    lastPos.current = { x: e.clientX, y: e.clientY };
+    setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+  };
+
+  const stopDrag = () => {
+    dragging.current = false;
+    setIsDragging(false);
+  };
+
+  const handleToggleShowYou = () => {
+    setShowYou((s) => !s);
+    setPan({ x: 0, y: 0 });
+    setScale(1.0);
   };
 
   return (
@@ -111,7 +143,7 @@ export default function SkillsMap() {
                 </button>
               </div>
               <div className="flex items-center gap-2 mt-2">
-                <img 
+                <img
                   src={imgCarrollLabs}
                   alt="Carroll Labs"
                   className="w-8 h-8 object-cover rounded"
@@ -178,8 +210,7 @@ export default function SkillsMap() {
               {showYou && (
                 <div className="bg-white border border-gray-200 rounded-lg p-4">
                   <p className="text-[11px] font-medium text-gray-400 mb-3">Insights Generated</p>
-                  
-                  {/* 87% Match Button */}
+
                   <button
                     onClick={() => setShowMatchExplanation(true)}
                     className="mb-2 w-full flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-50 to-blue-50 border border-[#b9f8cf] rounded-lg hover:border-green-300 transition-colors"
@@ -191,7 +222,6 @@ export default function SkillsMap() {
                     <span className="text-[11px] font-semibold text-[#008236]">87% Match</span>
                   </button>
 
-                  {/* Insights List */}
                   <ul className="text-[13px] text-gray-700 space-y-2 list-disc pl-4">
                     <li>
                       You are closest in skillset to <span className="font-semibold">Andrew Chan</span>
@@ -221,7 +251,7 @@ export default function SkillsMap() {
 
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={() => setShowYou(!showYou)}
+                      onClick={handleToggleShowYou}
                       className={`px-4 py-2 text-[13px] font-medium rounded-md border transition-colors ${
                         showYou
                           ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
@@ -234,17 +264,17 @@ export default function SkillsMap() {
                     <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5">
                       <button
                         onClick={handleZoomOut}
-                        disabled={zoom <= 0}
+                        disabled={scale <= MIN_SCALE}
                         className="text-gray-600 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed text-lg font-medium"
                       >
                         −
                       </button>
                       <span className="text-[11px] text-gray-500 min-w-[40px] text-center">
-                        {zoom}%
+                        {zoomPercent}%
                       </span>
                       <button
                         onClick={handleZoomIn}
-                        disabled={zoom >= 100}
+                        disabled={scale >= MAX_SCALE}
                         className="text-gray-600 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed text-lg font-medium"
                       >
                         +
@@ -254,17 +284,17 @@ export default function SkillsMap() {
                 </div>
 
                 {/* Stats Row */}
-                <div className={`flex items-center gap-3 mb-4 ${showYou ? 'bg-blue-50 rounded-lg px-2 py-1 w-fit' : ''}`}>
+                <div className={`flex items-center gap-3 mb-4 ${showYou ? "bg-blue-50 rounded-lg px-2 py-1 w-fit" : ""}`}>
                   <p className="text-[16px] font-medium text-gray-900">
-                    <span className={showYou ? 'text-blue-600' : ''}>{showYou ? '5' : '4'} </span>
+                    <span className={showYou ? "text-blue-600" : ""}>{showYou ? "5" : "4"} </span>
                     <span className="text-[12px] font-normal text-gray-500">Team Members</span>
                   </p>
                   <p className="text-[16px] font-medium text-gray-900">
-                    <span className={showYou ? 'text-blue-600' : ''}>{showYou ? '13' : '11'} </span>
+                    <span className={showYou ? "text-blue-600" : ""}>{showYou ? "13" : "11"} </span>
                     <span className="text-[12px] font-normal text-gray-500">Total Skills</span>
                   </p>
                   <p className="text-[16px] font-medium text-gray-900">
-                    <span className={showYou ? 'text-blue-600' : ''}>{showYou ? '8' : '6'} </span>
+                    <span className={showYou ? "text-blue-600" : ""}>{showYou ? "8" : "6"} </span>
                     <span className="text-[12px] font-normal text-gray-500">Shared Skills</span>
                   </p>
                 </div>
@@ -295,19 +325,28 @@ export default function SkillsMap() {
                   </div>
                 </div>
 
+                {/* Hint */}
+                <p className="text-[11px] text-gray-400 mb-3">Scroll to zoom · Drag to pan · Hover tags for details</p>
+
                 {/* Venn Diagram Container */}
-                <div className="relative h-[700px] bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+                <div
+                  ref={containerRef}
+                  className="relative h-[700px] bg-gray-50 rounded-lg border border-gray-200 overflow-hidden select-none"
+                  style={{ cursor: isDragging ? "grabbing" : "grab" }}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={stopDrag}
+                  onMouseLeave={stopDrag}
+                >
                   <div
-                    className="transition-transform duration-300 origin-top-left"
-                    style={{ 
-                      transform: `scale(${1 + zoom / 100})`,
+                    className="absolute inset-0"
+                    style={{
+                      transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+                      transformOrigin: "center center",
+                      willChange: "transform",
                     }}
                   >
-                    {zoom > 0 ? (
-                      <VennDiagramDetailed />
-                    ) : (
-                      showYou ? <VennDiagram5People /> : <VennDiagram4People />
-                    )}
+                    {showYou ? <VennDiagram5People /> : <VennDiagram4People />}
                   </div>
                 </div>
               </div>
