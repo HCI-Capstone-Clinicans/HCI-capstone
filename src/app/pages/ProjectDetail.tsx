@@ -1,6 +1,6 @@
 import { Header } from "../components/Header";
 import { Link, useParams } from "react-router";
-import { MapPin, ExternalLink, TrendingUp } from "lucide-react";
+import { MapPin, ExternalLink, TrendingUp, Lock } from "lucide-react";
 import imgRobot1 from "../../assets/ddae6b8d5d02b2088350f4841c6924acbca5d8f7.png";
 import imgRobot2 from "../../assets/83df25dac5dc5e2ced674c21a91028ff1d2960ae.png";
 import imgRoboDog3 from "../../assets/c1723e711714dd180e9890511514930b6856cfb4.png";
@@ -10,6 +10,7 @@ import imgLogo from "../../assets/783f2c42ea769440e177775b6794f454354e65fd.png";
 import { useState, useEffect } from "react";
 import { MatchExplanation } from "../components/MatchExplanation";
 import { useBookmarks } from "../context/BookmarksContext";
+import { useAuth } from "../context/AuthContext";
 
 interface TeamMember {
   name: string;
@@ -233,6 +234,7 @@ const projectsData: Record<string, ProjectData> = {
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
+  const { session } = useAuth();
   const [showMatchExplanation, setShowMatchExplanation] = useState(false);
   const [expandedUpdate, setExpandedUpdate] = useState<number | null>(null);
   const { isBookmarked, toggleBookmark } = useBookmarks();
@@ -347,35 +349,37 @@ export default function ProjectDetail() {
                       <span>{project.location}</span>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-2 items-end">
-                    <button
-                      onClick={() => setShowMatchExplanation(true)}
-                      className="px-2 py-1 bg-gradient-to-r from-green-50 to-blue-50 text-green-700 text-[11px] font-semibold rounded-md border border-green-200 hover:border-green-300 transition-all flex items-center gap-1"
-                    >
-                      <TrendingUp className="h-3 w-3" />
-                      {project.matchPercentage}% Match
-                    </button>
-                    <button
-                      onClick={() => toggleBookmark({
-                        id: project.id,
-                        name: project.name,
-                        lab: project.lab,
-                        location: project.location,
-                        tags: project.researchAreas,
-                        matchPercentage: project.matchPercentage,
-                      })}
-                      className={`px-4 py-2 text-[13px] font-medium rounded-md border transition-colors ${
-                        isBookmarked(project.id)
-                          ? "text-green-700 bg-green-50 border-green-300"
-                          : "text-gray-700 bg-white border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      {isBookmarked(project.id) ? "Following" : "Stay Updated"}
-                    </button>
-                    <button className="px-4 py-2 text-[13px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors whitespace-nowrap">
-                      Contact Project Coordinator
-                    </button>
-                  </div>
+                  {session && (
+                    <div className="flex flex-col gap-2 items-end">
+                      <button
+                        onClick={() => setShowMatchExplanation(true)}
+                        className="px-2 py-1 bg-gradient-to-r from-green-50 to-blue-50 text-green-700 text-[11px] font-semibold rounded-md border border-green-200 hover:border-green-300 transition-all flex items-center gap-1"
+                      >
+                        <TrendingUp className="h-3 w-3" />
+                        {project.matchPercentage}% Match
+                      </button>
+                      <button
+                        onClick={() => toggleBookmark({
+                          id: project.id,
+                          name: project.name,
+                          lab: project.lab,
+                          location: project.location,
+                          tags: project.researchAreas,
+                          matchPercentage: project.matchPercentage,
+                        })}
+                        className={`px-4 py-2 text-[13px] font-medium rounded-md border transition-colors ${
+                          isBookmarked(project.id)
+                            ? "text-green-700 bg-green-50 border-green-300"
+                            : "text-gray-700 bg-white border-gray-300 hover:bg-gray-50"
+                        }`}
+                      >
+                        {isBookmarked(project.id) ? "Following" : "Stay Updated"}
+                      </button>
+                      <button className="px-4 py-2 text-[13px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors whitespace-nowrap">
+                        Contact Project Coordinator
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -389,8 +393,29 @@ export default function ProjectDetail() {
                 </div>
               </div>
 
+              {/* Login gate for main content */}
+              {!session && (
+                <div className="bg-white border border-gray-200 rounded-lg p-8 flex flex-col items-center text-center gap-3">
+                  <div className="w-12 h-12 bg-gray-100 border border-gray-200 rounded-full flex items-center justify-center">
+                    <Lock className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <div>
+                    <p className="text-[15px] font-semibold text-gray-900 mb-1">Log in to see more details</p>
+                    <p className="text-[13px] text-gray-500 max-w-sm">
+                      Sign in to view team members, research images, project updates, and more.
+                    </p>
+                  </div>
+                  <Link
+                    to="/login"
+                    className="mt-1 px-5 py-2.5 bg-gray-900 text-white text-[13px] font-medium rounded-md hover:bg-gray-800 transition-colors"
+                  >
+                    Log in
+                  </Link>
+                </div>
+              )}
+
               {/* Research Images */}
-              {project.images.length > 0 && (
+              {session && project.images.length > 0 && (
                 <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
                   <h2 className="text-[11px] uppercase tracking-wide text-gray-500">Research</h2>
                   <div className="grid grid-cols-2 gap-4">
@@ -402,39 +427,41 @@ export default function ProjectDetail() {
               )}
 
               {/* Team Members */}
-              <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[11px] uppercase tracking-wide text-gray-500">Team Members</h2>
-                  <Link
-                    to={`/project/${project.id}/skills-map`}
-                    className="px-3 py-1.5 text-[13px] font-medium text-gray-900 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1.5"
-                  >
-                    View Skills Map
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {project.teamMembers.map((member, idx) => (
-                    <div key={idx} className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 bg-gray-100 border border-gray-200 rounded-md flex items-center justify-center flex-shrink-0">
-                          <span className="text-[12px] text-gray-500 font-medium">
-                            {member.name.split(" ").map(n => n[0]).join("")}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-medium text-gray-900">{member.name}</p>
-                          <p className="text-[12px] text-gray-600 mt-0.5">{member.role}</p>
-                          <p className="text-[11px] text-gray-500 mt-1">{member.expertise}</p>
+              {session && (
+                <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-[11px] uppercase tracking-wide text-gray-500">Team Members</h2>
+                    <Link
+                      to={`/project/${project.id}/skills-map`}
+                      className="px-3 py-1.5 text-[13px] font-medium text-gray-900 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-1.5"
+                    >
+                      View Skills Map
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {project.teamMembers.map((member, idx) => (
+                      <div key={idx} className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 bg-gray-100 border border-gray-200 rounded-md flex items-center justify-center flex-shrink-0">
+                            <span className="text-[12px] text-gray-500 font-medium">
+                              {member.name.split(" ").map(n => n[0]).join("")}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-medium text-gray-900">{member.name}</p>
+                            <p className="text-[12px] text-gray-600 mt-0.5">{member.role}</p>
+                            <p className="text-[11px] text-gray-500 mt-1">{member.expertise}</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Project Updates - only shown for RoboDog */}
-              {project.id === "robodog" && <div className="space-y-4">
+              {/* Project Updates - only shown for RoboDog when logged in */}
+              {session && project.id === "robodog" && <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <h2 className="text-[11px] uppercase tracking-wide text-gray-500">Project Updates</h2>
@@ -523,8 +550,24 @@ export default function ProjectDetail() {
                 </div>
               </div>
 
+              {/* Sidebar login gate */}
+              {!session && (
+                <div className="bg-white border border-gray-200 rounded-lg p-6 flex flex-col items-center text-center gap-3">
+                  <div className="w-10 h-10 bg-gray-100 border border-gray-200 rounded-full flex items-center justify-center">
+                    <Lock className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <p className="text-[13px] font-semibold text-gray-900">Log in to see more details</p>
+                  <Link
+                    to="/login"
+                    className="w-full px-4 py-2 bg-gray-900 text-white text-[13px] font-medium rounded-md hover:bg-gray-800 transition-colors text-center"
+                  >
+                    Log in
+                  </Link>
+                </div>
+              )}
+
               {/* Research Areas */}
-              <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
+              {session && <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
                 <h2 className="text-[11px] uppercase tracking-wide text-gray-500">Research Areas</h2>
                 <div className="flex flex-wrap gap-1.5">
                   {project.researchAreas.map((area, idx) => {
@@ -546,10 +589,10 @@ export default function ProjectDetail() {
                     );
                   })}
                 </div>
-              </div>
+              </div>}
 
               {/* Looking For */}
-              <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
+              {session && <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
                 <h2 className="text-[11px] uppercase tracking-wide text-gray-500">Looking For</h2>
                 <div className="flex flex-wrap gap-1.5">
                   {project.lookingFor.map((item, idx) => {
@@ -571,54 +614,58 @@ export default function ProjectDetail() {
                     );
                   })}
                 </div>
-              </div>
+              </div>}
 
               {/* Team Meetings */}
-              <div className="bg-white border border-cyan-200 rounded-lg p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[11px] uppercase tracking-wide text-gray-500">Team Meetings</h2>
-                  <span className={`px-2 py-0.5 text-[11px] font-medium rounded ${meetingStatus.bgColor} ${meetingStatus.textColor} border ${meetingStatus.borderColor}`}>
-                    {meetingStatus.label}
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {project.teamMeetings.map((meeting, idx) => {
-                    const canAttend = myAvailability.some(d => d.day === meeting.day);
-                    return (
-                      <div
-                        key={idx}
-                        className={`p-2.5 rounded-md border ${canAttend ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-[12px] font-medium text-gray-900">{meeting.day}</span>
-                          {canAttend && (
-                            <span className="text-[10px] font-medium text-green-700 uppercase tracking-wide">Available</span>
-                          )}
+              {session && (
+                <div className="bg-white border border-cyan-200 rounded-lg p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-[11px] uppercase tracking-wide text-gray-500">Team Meetings</h2>
+                    <span className={`px-2 py-0.5 text-[11px] font-medium rounded ${meetingStatus.bgColor} ${meetingStatus.textColor} border ${meetingStatus.borderColor}`}>
+                      {meetingStatus.label}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {project.teamMeetings.map((meeting, idx) => {
+                      const canAttend = myAvailability.some(d => d.day === meeting.day);
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-2.5 rounded-md border ${canAttend ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[12px] font-medium text-gray-900">{meeting.day}</span>
+                            {canAttend && (
+                              <span className="text-[10px] font-medium text-green-700 uppercase tracking-wide">Available</span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-gray-600">{meeting.time}</div>
+                          <div className="text-[10px] text-gray-500 mt-0.5">{meeting.type}</div>
                         </div>
-                        <div className="text-[11px] text-gray-600">{meeting.time}</div>
-                        <div className="text-[10px] text-gray-500 mt-0.5">{meeting.type}</div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Related Projects */}
-              <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
-                <h2 className="text-[11px] uppercase tracking-wide text-gray-500">Related Projects</h2>
-                <div className="space-y-3">
-                  {project.relatedProjects.map((related, idx) => (
-                    <Link
-                      key={idx}
-                      to={`/project/${related.id}`}
-                      className="block p-3 rounded border border-gray-200 hover:border-gray-300 transition-colors"
-                    >
-                      <p className="text-[13px] font-medium text-gray-900">{related.name}</p>
-                      <p className="text-[11px] text-gray-500 mt-1">{related.description}</p>
-                    </Link>
-                  ))}
+              {session && (
+                <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
+                  <h2 className="text-[11px] uppercase tracking-wide text-gray-500">Related Projects</h2>
+                  <div className="space-y-3">
+                    {project.relatedProjects.map((related, idx) => (
+                      <Link
+                        key={idx}
+                        to={`/project/${related.id}`}
+                        className="block p-3 rounded border border-gray-200 hover:border-gray-300 transition-colors"
+                      >
+                        <p className="text-[13px] font-medium text-gray-900">{related.name}</p>
+                        <p className="text-[11px] text-gray-500 mt-1">{related.description}</p>
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

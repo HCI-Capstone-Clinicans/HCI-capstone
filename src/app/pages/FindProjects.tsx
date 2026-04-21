@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
-import { Search, ChevronDown, MapPin, TrendingUp, X } from "lucide-react";
+import { Search, ChevronDown, MapPin, TrendingUp, X, Lock } from "lucide-react";
 import imgRobot from "../../assets/0dd2934842d6fa9897708ea0e164b300c59f584e.png";
 import { MatchExplanation } from "../components/MatchExplanation";
 import { useBookmarks } from "../context/BookmarksContext";
 import { ContactModal } from "../components/ContactModal";
-import DiscoverIntake from "./DiscoverIntake";
 import DiscoverMap from "./DiscoverMap";
+import { useAuth } from "../context/AuthContext";
 
 interface Project {
   id: string;
@@ -24,9 +24,8 @@ interface Project {
 }
 
 export default function FindProjects() {
+  const { session } = useAuth();
   const [activeTab, setActiveTab] = useState<"browse" | "discover">("browse");
-  const [discoverStage, setDiscoverStage] = useState<"intake" | "map">("intake");
-  const [discoverData, setDiscoverData] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDomain, setSelectedDomain] = useState("");
   const [selectedSkill, setSelectedSkill] = useState("");
@@ -200,9 +199,25 @@ export default function FindProjects() {
 
           {/* Discover tab */}
           {activeTab === "discover" && (
-            discoverStage === "intake"
-              ? <DiscoverIntake onComplete={(data) => { setDiscoverData(data); setDiscoverStage("map"); }} />
-              : <DiscoverMap intakeData={discoverData} onEditFilters={() => setDiscoverStage("intake")} />
+            session
+              ? <DiscoverMap intakeData={null} onEditFilters={() => {}} mode="projects" />
+              : (
+                <div className="flex flex-col items-center justify-center py-24 text-center">
+                  <div className="w-14 h-14 bg-gray-100 border border-gray-200 rounded-full flex items-center justify-center mb-5">
+                    <Lock className="h-6 w-6 text-gray-400" />
+                  </div>
+                  <p className="text-[15px] font-semibold text-gray-900 mb-1">Sign in to use Discover</p>
+                  <p className="text-[13px] text-gray-500 max-w-sm mb-6">
+                    Get personalized project matches based on your skills, interests, and location.
+                  </p>
+                  <Link
+                    to="/login"
+                    className="px-5 py-2.5 bg-gray-900 text-white text-[13px] font-medium rounded-md hover:bg-gray-800 transition-colors"
+                  >
+                    Sign in
+                  </Link>
+                </div>
+              )
           )}
 
           {/* Browse tab content */}

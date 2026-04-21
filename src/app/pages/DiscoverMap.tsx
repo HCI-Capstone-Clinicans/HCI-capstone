@@ -21,6 +21,63 @@ import { collaborators, Collaborator } from '../data/collaborators';
 import { institutionList } from '../data/collaborators';
 import ComprehensiveFilterPanel from '../components/ComprehensiveFilterPanel';
 import EditCriteriaPanel from '../components/EditCriteriaPanel';
+import { Link, useNavigate } from 'react-router';
+
+interface ProjectPin {
+  id: string;
+  name: string;
+  lab: string;
+  institution: string;
+  status: string;
+  tags: string[];
+  matchPercentage: number;
+  location: { lat: number; lng: number };
+}
+
+// Projects spread at 0 / 1.1 / 1.4 / 1.7 miles from userLocation so the
+// radius slider progressively reveals them one by one.
+const STATIC_PROJECTS: ProjectPin[] = [
+  {
+    id: 'robodog',
+    name: 'RoboDog',
+    lab: 'Carroll Labs',
+    institution: 'University Hospitals',
+    status: 'Prototype Development',
+    tags: ['Robotics', 'Human-Robot Interaction', 'Surgery'],
+    matchPercentage: 87,
+    location: { lat: 41.5045, lng: -81.6082 }, // 0 mi — at userLocation
+  },
+  {
+    id: 'smartsuture',
+    name: 'SmartSuture',
+    lab: 'Biomedical Engineering Lab',
+    institution: 'Case Western Reserve University',
+    status: 'Early Research',
+    tags: ['Robotics', 'Computer Vision', 'Medical Devices'],
+    matchPercentage: 68,
+    location: { lat: 41.5204, lng: -81.6082 }, // ~1.1 mi north
+  },
+  {
+    id: 'burnout-prevention',
+    name: 'Burnout Prevention',
+    lab: 'Cleveland Art Labs',
+    institution: 'UH Cleveland Medical Center',
+    status: 'Active Research',
+    tags: ['Digital Health', 'Mental Health', 'UX Research'],
+    matchPercentage: 30,
+    location: { lat: 41.4850, lng: -81.6082 }, // ~1.35 mi south
+  },
+  {
+    id: 'medassist',
+    name: 'MedAssist AI',
+    lab: 'Digital Health Innovation Lab',
+    institution: 'Cleveland Clinic',
+    status: 'Active Development',
+    tags: ['AI/ML', 'Surgery Assistance', 'Medical Devices'],
+    matchPercentage: 72,
+    location: { lat: 41.5045, lng: -81.6400 }, // ~1.65 mi west
+  },
+];
 
 interface IntakeData {
   role: 'doctor' | 'designer' | 'engineer' | null;
@@ -33,33 +90,58 @@ interface IntakeData {
 }
 
 interface DiscoverMapProps {
-  intakeData: IntakeData;
+  intakeData: IntakeData | null;
   onEditFilters: () => void;
+  mode?: 'projects' | 'collaborators';
 }
 
-export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapProps) {
-  const [selectedCollaborator, setSelectedCollaborator] = useState<Collaborator | null>(null);
+export default function DiscoverMap({ intakeData, onEditFilters, mode }: DiscoverMapProps) {
+  const showProjects = mode !== 'collaborators';
+  const showCollaborators = mode !== 'projects';
+  const navigate = useNavigate();
+
+  const [clickedMarkerId, setClickedMarkerId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(true);
   const [matchType, setMatchType] = useState<'exact' | 'adjacent'>('exact');
-  const [radiusFilter, setRadiusFilter] = useState(10);
+  const [radiusFilter, setRadiusFilter] = useState(1);
   const [appliedFilters, setAppliedFilters] = useState<Record<string, string[]>>({
-    areaOfInterest: intakeData.topicArea
+    areaOfInterest: intakeData?.topicArea ?? []
   });
   const [mapCenter, setMapCenter] = useState<[number, number]>([41.4993, -81.6944]);
   const [mapZoom, setMapZoom] = useState(12);
   const [hoveredMarker, setHoveredMarker] = useState<string | null>(null);
   const [showEditCriteria, setShowEditCriteria] = useState(false);
-  const [currentIntakeData, setCurrentIntakeData] = useState<IntakeData>(intakeData);
+  const DEFAULT_INTAKE: IntakeData = {
+    role: null,
+    collaborationIntent: [],
+    topicArea: [],
+    skills: [],
+    location: "Cleveland, OH",
+    availability: "",
+    projectStage: [],
+  };
+  const [currentIntakeData, setCurrentIntakeData] = useState<IntakeData>(intakeData ?? DEFAULT_INTAKE);
 
-  // Calculate user location as epicenter of all collaborators
-  const userLocation = useMemo(() => {
-    if (collaborators.length === 0) return [41.4993, -81.6944];
-    
-    const latSum = collaborators.reduce((sum, c) => sum + c.location.lat, 0);
-    const lngSum = collaborators.reduce((sum, c) => sum + c.location.lng, 0);
-    
-    return [latSum / collaborators.length, lngSum / collaborators.length];
-  }, []);
+  // Fixed user location: University Hospitals / Case Western cluster (Cleveland, OH)
+  const userLocation: [number, number] = [41.5045, -81.6082];
+
+  // Haversine distance in miles between two lat/lng points
+  function getDistanceMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 3958.8;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // Pixels per mile at current zoom + latitude (256px tile size, Web Mercator)
+  const pixelsPerMile = useMemo(() => {
+    const EARTH_CIRC_MILES = 24901;
+    return (256 * Math.pow(2, mapZoom)) / (EARTH_CIRC_MILES * Math.cos(userLocation[0] * Math.PI / 180));
+  }, [mapZoom]);
 
   // Custom tile provider for light, flat aesthetic (CartoDB Positron)
   const customTileProvider = (x: number, y: number, z: number) => {
@@ -69,6 +151,13 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
   // Filter collaborators based on current filters
   const filteredCollaborators = useMemo(() => {
     return collaborators.filter(collab => {
+      // Radius filter — only include collaborators within the search radius
+      const dist = getDistanceMiles(
+        userLocation[0], userLocation[1],
+        collab.location.lat, collab.location.lng
+      );
+      if (dist > radiusFilter) return false;
+
       // Role filter - include residents and nurses when filtering by doctor
       if (appliedFilters.role && appliedFilters.role.length > 0) {
         const roleMatch = appliedFilters.role.some(filterRole => {
@@ -133,15 +222,6 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
         }
       }
 
-      // Location/institution filter (from currentIntakeData)
-      if (currentIntakeData.location && currentIntakeData.location !== '') {
-        if (matchType === 'exact') {
-          if (!collab.institution.toLowerCase().includes(currentIntakeData.location.toLowerCase())) {
-            return false;
-          }
-        }
-      }
-
       // Additional advanced filters from appliedFilters
       if (appliedFilters.workingStyle && appliedFilters.workingStyle.length > 0) {
         const hasMatchingStyle = collab.workingStyle.some(style =>
@@ -172,7 +252,7 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
 
       return true;
     });
-  }, [appliedFilters, matchType, currentIntakeData]);
+  }, [appliedFilters, matchType, currentIntakeData, radiusFilter]);
 
   // Calculate match score
   const getMatchScore = (collab: Collaborator): number => {
@@ -213,6 +293,12 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
     ...collab,
     matchScore: getMatchScore(collab)
   })).sort((a, b) => b.matchScore - a.matchScore);
+
+  const filteredProjects = useMemo(() =>
+    STATIC_PROJECTS.filter(p =>
+      getDistanceMiles(userLocation[0], userLocation[1], p.location.lat, p.location.lng) <= radiusFilter
+    ),
+  [radiusFilter]);
 
   // For adjacent mode, only show high-quality matches (top performers)
   const displayedCollaborators = useMemo(() => {
@@ -376,16 +462,22 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
               </div>
 
               {/* Quick Stats */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <div className="text-2xl font-bold text-gray-900">
-                    {collaboratorsWithScores.length}
+              <div className="grid grid-cols-2 gap-2">
+                {showProjects && (
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div className="text-2xl font-bold text-gray-900">{filteredProjects.length}</div>
+                    <div className="text-xs text-gray-600">Projects</div>
                   </div>
-                  <div className="text-xs text-gray-600">Collaborators</div>
-                </div>
-                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                )}
+                {showCollaborators && (
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div className="text-2xl font-bold text-gray-900">{collaboratorsWithScores.length}</div>
+                    <div className="text-xs text-gray-600">People</div>
+                  </div>
+                )}
+                <div className={`p-3 bg-gray-50 border border-gray-200 rounded-lg ${showProjects && showCollaborators ? 'col-span-2' : ''}`}>
                   <div className="text-2xl font-bold text-gray-900">
-                    {collaboratorsWithScores.filter(c => c.matchScore > 70).length}
+                    {showCollaborators ? collaboratorsWithScores.filter(c => c.matchScore > 70).length : filteredProjects.filter(p => p.matchPercentage > 70).length}
                   </div>
                   <div className="text-xs text-gray-600">Strong Matches</div>
                 </div>
@@ -429,9 +521,9 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
                 </label>
                 <input
                   type="range"
-                  min="5"
-                  max="50"
-                  step="5"
+                  min="0.5"
+                  max="10"
+                  step="0.5"
                   value={radiusFilter}
                   onChange={(e) => setRadiusFilter(Number(e.target.value))}
                   className="w-full"
@@ -450,76 +542,107 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
             <div className="flex-1 overflow-y-auto p-6">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="font-semibold text-gray-900">
-                  Results ({displayedCollaborators.length})
+                  Results ({(showProjects ? filteredProjects.length : 0) + (showCollaborators ? displayedCollaborators.length : 0)})
                 </h3>
-                <select className="text-xs border border-gray-200 rounded px-2 py-1">
-                  <option>Best Match</option>
-                  <option>Nearest</option>
-                  <option>Most Available</option>
-                </select>
               </div>
 
-              {matchType === 'adjacent' && displayedCollaborators.length < collaboratorsWithScores.length && (
-                <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <p className="text-xs text-gray-600">
-                    <strong>Adjacent mode:</strong> Showing top {displayedCollaborators.length} best matches out of {collaboratorsWithScores.length} total
-                  </p>
+              {/* Projects */}
+              {showProjects && filteredProjects.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Projects</p>
+                  <div className="space-y-2">
+                    {filteredProjects.map((project) => (
+                      <motion.button
+                        key={project.id}
+                        onClick={() => {
+                          setClickedMarkerId(prev => prev === project.id ? null : project.id);
+                          setMapCenter([project.location.lat, project.location.lng]);
+                          setMapZoom(15);
+                        }}
+                        whileHover={{ scale: 1.01 }}
+                        className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                          clickedMarkerId === project.id
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                            {project.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-0.5">
+                              <h4 className="font-semibold text-gray-900 text-sm truncate">{project.name}</h4>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ${
+                                project.matchPercentage > 70 ? 'bg-green-100 text-green-700' :
+                                project.matchPercentage > 50 ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>{project.matchPercentage}%</span>
+                            </div>
+                            <p className="text-xs text-gray-500 truncate">{project.lab}</p>
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {project.tags.slice(0, 2).map((t, i) => (
+                                <span key={i} className="px-1.5 py-0.5 text-[10px] bg-green-50 text-green-700 border border-green-200 rounded">{t}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </motion.button>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              <div className="space-y-3">
-                {displayedCollaborators.map((collab) => (
-                  <motion.button
-                    key={collab.id}
-                    onClick={() => {
-                      setSelectedCollaborator(collab);
-                      setMapCenter([collab.location.lat, collab.location.lng]);
-                      setMapZoom(14);
-                    }}
-                    whileHover={{ scale: 1.02 }}
-                    className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
-                      selectedCollaborator?.id === collab.id
-                        ? 'border-gray-900 bg-gray-50 shadow-sm'
-                        : 'border-gray-200 hover:border-gray-300 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3 mb-2">
-                      <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getRoleColor(collab.role)} flex items-center justify-center text-white font-semibold text-lg flex-shrink-0`}>
-                        {collab.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <h4 className="font-semibold text-gray-900 truncate">
-                            {collab.name}
-                          </h4>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            collab.matchScore > 70 ? 'bg-green-100 text-green-700' :
-                            collab.matchScore > 50 ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
-                            {collab.matchScore}%
-                          </span>
+              {/* Collaborators */}
+              {showCollaborators && displayedCollaborators.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-2">People</p>
+                  <div className="space-y-2">
+                    {displayedCollaborators.map((collab) => (
+                      <motion.button
+                        key={collab.id}
+                        onClick={() => {
+                          setClickedMarkerId(prev => prev === collab.id ? null : collab.id);
+                          setMapCenter([collab.location.lat, collab.location.lng]);
+                          setMapZoom(15);
+                        }}
+                        whileHover={{ scale: 1.01 }}
+                        className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                          clickedMarkerId === collab.id
+                            ? 'border-gray-900 bg-gray-50 shadow-sm'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getRoleColor(collab.role)} flex items-center justify-center text-white font-semibold text-sm flex-shrink-0`}>
+                            {collab.name.split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-0.5">
+                              <h4 className="font-semibold text-gray-900 text-sm truncate">{collab.name}</h4>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ${
+                                collab.matchScore > 70 ? 'bg-green-100 text-green-700' :
+                                collab.matchScore > 50 ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>{collab.matchScore}%</span>
+                            </div>
+                            <p className="text-xs text-gray-600 truncate">{collab.title}</p>
+                            <p className="text-xs text-gray-500 truncate">{collab.institution}</p>
+                          </div>
                         </div>
-                        <p className="text-xs text-gray-600 truncate mb-1">
-                          {collab.title}
-                        </p>
-                        <p className="text-xs text-gray-500 truncate">
-                          {collab.institution}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <CardTagRow label="Role" color="blue" values={[collab.role.charAt(0).toUpperCase() + collab.role.slice(1)]} />
-                      <CardTagRow label="Reasons" color="purple" values={collab.collaborationIntent} max={1} />
-                      <CardTagRow label="Interests" color="gray" values={collab.topicAreas} max={2} />
-                      <CardTagRow label="Skills" color="orange" values={collab.skills} max={2} />
-                      <CardTagRow label="Location" color="teal" values={[collab.institution]} max={1} />
-                      <CardTagRow label="Availability" color="green" values={[collab.availability.charAt(0).toUpperCase() + collab.availability.slice(1).replace(/-/g, ' ')]} />
-                      <CardTagRow label="Pref. Org" color="rose" values={collab.preferredOrgType} max={1} />
-                    </div>
-                  </motion.button>
-                ))}
-              </div>
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(showProjects ? filteredProjects.length : 0) + (showCollaborators ? displayedCollaborators.length : 0) === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <MapPin className="h-8 w-8 text-gray-300 mb-3" />
+                  <p className="text-sm text-gray-500">No results within {radiusFilter} miles.</p>
+                  <p className="text-xs text-gray-400 mt-1">Try increasing the search radius.</p>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -540,7 +663,7 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
 
         {/* Floating Chips */}
         <div className="absolute top-6 right-6 z-[1000] flex flex-wrap gap-2 max-w-md">
-          {intakeData.topicArea.slice(0, 3).map((topic, idx) => (
+          {(intakeData?.topicArea ?? []).slice(0, 3).map((topic, idx) => (
             <div
               key={idx}
               className="px-3 py-2 bg-white rounded-full shadow-md text-sm font-medium text-gray-700 border border-gray-200"
@@ -548,9 +671,9 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
               {topic}
             </div>
           ))}
-          {intakeData.topicArea.length > 3 && (
+          {(intakeData?.topicArea ?? []).length > 3 && (
             <div className="px-3 py-2 bg-white rounded-full shadow-md text-sm font-medium text-gray-600 border border-gray-200">
-              +{intakeData.topicArea.length - 3} more
+              +{(intakeData?.topicArea ?? []).length - 3} more
             </div>
           )}
         </div>
@@ -632,35 +755,35 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
               key={inst.id}
               anchor={[inst.location.lat, inst.location.lng]}
               offset={[20, 20]}
-              onClick={() => {
-                setMapCenter([inst.location.lat, inst.location.lng]);
-                setMapZoom(15);
-              }}
+              onClick={() => setClickedMarkerId(prev => prev === inst.id ? null : inst.id)}
             >
-              <div 
-                className="relative"
-                onMouseEnter={() => setHoveredMarker(inst.id)}
-                onMouseLeave={() => setHoveredMarker(null)}
-              >
-                <CustomMarker 
-                  color="#64748b" 
+              <div className="relative">
+                <CustomMarker
+                  color="#64748b"
                   size={40}
                   isInstitution={true}
                   isUH={inst.isUH}
                 />
-                {hoveredMarker === inst.id && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none z-50">
-                    <div className={`text-white text-xs px-4 py-3 rounded-lg shadow-2xl whitespace-nowrap ${
-                      inst.isUH ? 'bg-gradient-to-r from-cyan-600 to-blue-700' : 'bg-gray-900'
-                    }`}>
-                      <div className="font-semibold text-sm">{inst.name}</div>
-                      <div className={inst.isUH ? 'text-cyan-100' : 'text-gray-300'}>
-                        {inst.collaboratorCount} collaborators
+                {clickedMarkerId === inst.id && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-52 pointer-events-auto">
+                    <div className={`rounded-xl shadow-xl p-3 ${inst.isUH ? 'bg-gradient-to-br from-cyan-600 to-blue-700' : 'bg-gray-900'}`}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setClickedMarkerId(null); }}
+                        className="absolute top-2 right-2 text-white/60 hover:text-white"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                      <div className="flex items-center gap-2 mb-2 pr-4">
+                        <Building2 className="h-5 w-5 text-white flex-shrink-0" />
+                        <p className="text-sm font-semibold text-white leading-tight">{inst.name}</p>
                       </div>
+                      <p className={`text-xs mb-1 ${inst.isUH ? 'text-cyan-100' : 'text-gray-300'}`}>
+                        {inst.collaboratorCount} collaborators
+                      </p>
                       {inst.isUH && (
-                        <div className="mt-1 pt-1 border-t border-cyan-400 text-cyan-200 text-xs font-semibold">
+                        <p className="text-[10px] font-semibold text-cyan-200 border-t border-cyan-400/50 pt-1.5 mt-1.5">
                           ★ UH Network Hospital
-                        </div>
+                        </p>
                       )}
                     </div>
                   </div>
@@ -669,8 +792,68 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
             </Marker>
           ))}
 
+          {/* Project Markers */}
+          {showProjects && filteredProjects.map((project) => (
+            <Marker
+              key={project.id}
+              anchor={[project.location.lat, project.location.lng]}
+              offset={[14, 14]}
+              onClick={() => setClickedMarkerId(prev => prev === project.id ? null : project.id)}
+            >
+              <div className="relative">
+                <div className={`w-7 h-7 rounded-lg border-2 border-white shadow-lg flex items-center justify-center cursor-pointer transition-transform hover:scale-110 ${
+                  clickedMarkerId === project.id ? 'ring-2 ring-green-500' : ''
+                } bg-gradient-to-br from-green-500 to-teal-600`}>
+                  <span className="text-white text-[9px] font-bold leading-none">
+                    {project.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  </span>
+                </div>
+                {clickedMarkerId === project.id && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-52 pointer-events-auto">
+                    <div className="bg-white border border-gray-200 rounded-xl shadow-xl p-3">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setClickedMarkerId(null); }}
+                        className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                      <div className="flex items-center gap-2 mb-2 pr-4">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500 to-teal-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          {project.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-gray-900 truncate">{project.name}</p>
+                          <p className="text-[10px] text-gray-500 truncate">{project.lab}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span className="px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-600 rounded">{project.status}</span>
+                        <span className={`px-1.5 py-0.5 text-[10px] rounded font-semibold ${
+                          project.matchPercentage > 70 ? 'bg-green-100 text-green-700' :
+                          project.matchPercentage > 50 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>{project.matchPercentage}% match</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mb-2.5">
+                        {project.tags.slice(0, 2).map((t, i) => (
+                          <span key={i} className="px-1.5 py-0.5 text-[10px] bg-green-50 text-green-700 border border-green-200 rounded">{t}</span>
+                        ))}
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); navigate(`/project/${project.id}`); }}
+                        className="block w-full text-center px-3 py-1.5 bg-gray-900 text-white text-[11px] font-medium rounded-lg hover:bg-gray-800 transition-colors"
+                      >
+                        View Project →
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Marker>
+          ))}
+
           {/* Collaborator Markers */}
-          {displayedCollaborators.map((collab) => {
+          {showCollaborators && displayedCollaborators.map((collab) => {
             const color = collab.role === 'doctor' ? '#3b82f6' : 
                          collab.role === 'designer' ? '#a855f7' : '#f97316';
             const size = collab.matchScore > 70 ? 20 : 16;
@@ -680,35 +863,50 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
                 key={collab.id}
                 anchor={[collab.location.lat, collab.location.lng]}
                 offset={[size / 2, size / 2]}
-                onClick={() => setSelectedCollaborator(collab)}
+                onClick={() => setClickedMarkerId(prev => prev === collab.id ? null : collab.id)}
               >
-                <div 
-                  className="relative"
-                  onMouseEnter={() => setHoveredMarker(collab.id)}
-                  onMouseLeave={() => setHoveredMarker(null)}
-                >
-                  <CustomMarker 
-                    color={color} 
+                <div className="relative">
+                  <CustomMarker
+                    color={color}
                     size={size}
-                    isSelected={selectedCollaborator?.id === collab.id}
+                    isSelected={clickedMarkerId === collab.id}
                   />
-                  {hoveredMarker === collab.id && (
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none">
-                      <div className="bg-white border-2 border-gray-200 rounded-lg shadow-xl p-3 whitespace-nowrap">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className={`w-6 h-6 rounded-full bg-gradient-to-br ${getRoleColor(collab.role)} flex items-center justify-center text-white text-xs font-semibold`}>
+                  {clickedMarkerId === collab.id && (
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-52 pointer-events-auto">
+                      <div className="bg-white border border-gray-200 rounded-xl shadow-xl p-3">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setClickedMarkerId(null); }}
+                          className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                        <div className="flex items-center gap-2 mb-2 pr-4">
+                          <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${getRoleColor(collab.role)} flex items-center justify-center text-white text-xs font-semibold flex-shrink-0`}>
                             {collab.name.split(' ').map(n => n[0]).join('')}
                           </div>
-                          <div className="font-semibold text-gray-900 text-sm">{collab.name}</div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-gray-900 truncate">{collab.name}</p>
+                            <p className="text-[10px] text-gray-500 truncate">{collab.title}</p>
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-600 mb-1">{collab.title}</div>
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          collab.matchScore > 70 ? 'bg-green-100 text-green-700' :
-                          collab.matchScore > 50 ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-gray-100 text-gray-700'
-                        }`}>
-                          {collab.matchScore}% match
-                        </span>
+                        <p className="text-[10px] text-gray-500 mb-2">{collab.institution}</p>
+                        <div className="flex items-center gap-1.5 mb-2.5">
+                          <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-semibold border ${getRoleBadgeColor(collab.role)}`}>
+                            {collab.role.charAt(0).toUpperCase() + collab.role.slice(1)}
+                          </span>
+                          <span className={`px-1.5 py-0.5 text-[10px] rounded font-semibold ${
+                            collab.matchScore > 70 ? 'bg-green-100 text-green-700' :
+                            collab.matchScore > 50 ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>{collab.matchScore}% match</span>
+                        </div>
+                        <Link
+                          to={`/collaborator/${collab.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="block w-full text-center px-3 py-1.5 bg-gray-900 text-white text-[11px] font-medium rounded-lg hover:bg-gray-800 transition-colors"
+                        >
+                          View Full Profile →
+                        </Link>
                       </div>
                     </div>
                   )}
@@ -772,128 +970,19 @@ export default function DiscoverMap({ intakeData, onEditFilters }: DiscoverMapPr
           </Marker>
 
           {/* Search Radius Circle Overlay */}
-          <Overlay anchor={userLocation as [number, number]} offset={[0, 0]}>
-            <div 
-              className="rounded-full border-2 border-gray-400 bg-gray-200 opacity-20 pointer-events-none"
+          <Overlay anchor={userLocation} offset={[0, 0]}>
+            <div
+              className="rounded-full border-2 border-blue-400 bg-blue-200 opacity-20 pointer-events-none"
               style={{
-                width: `${radiusFilter * Math.pow(2, mapZoom - 10)}px`,
-                height: `${radiusFilter * Math.pow(2, mapZoom - 10)}px`,
-                marginLeft: `-${radiusFilter * Math.pow(2, mapZoom - 10) / 2}px`,
-                marginTop: `-${radiusFilter * Math.pow(2, mapZoom - 10) / 2}px`
+                width: `${radiusFilter * pixelsPerMile * 2}px`,
+                height: `${radiusFilter * pixelsPerMile * 2}px`,
+                marginLeft: `-${radiusFilter * pixelsPerMile}px`,
+                marginTop: `-${radiusFilter * pixelsPerMile}px`,
               }}
             />
           </Overlay>
         </Map>
 
-        {/* Selected Collaborator Detail Panel */}
-        <AnimatePresence>
-          {selectedCollaborator && (
-            <motion.div
-              initial={{ x: 400 }}
-              animate={{ x: 0 }}
-              exit={{ x: 400 }}
-              transition={{ type: 'spring', damping: 25 }}
-              className="absolute right-0 top-0 bottom-0 w-96 bg-white shadow-2xl z-[1000] overflow-y-auto"
-            >
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-6">
-                  <div className="flex items-start gap-4">
-                    <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${getRoleColor(selectedCollaborator.role)} flex items-center justify-center text-white font-semibold text-2xl flex-shrink-0`}>
-                      {selectedCollaborator.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-semibold text-gray-900 mb-1">
-                        {selectedCollaborator.name}
-                      </h2>
-                      <p className="text-sm text-gray-600 mb-2">
-                        {selectedCollaborator.title}
-                      </p>
-                      <span className={`px-3 py-1 rounded-full text-sm font-semibold border ${
-                        selectedCollaborator.matchScore > 70 ? 'bg-green-50 text-green-700 border-green-200' :
-                        selectedCollaborator.matchScore > 50 ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                        'bg-gray-50 text-gray-700 border-gray-200'
-                      }`}>
-                        {selectedCollaborator.matchScore}% Match
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setSelectedCollaborator(null)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <X className="h-5 w-5 text-gray-500" />
-                  </button>
-                </div>
-
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg flex items-center gap-3">
-                  <Building2 className="h-5 w-5 text-gray-500" />
-                  <div>
-                    <div className="text-xs text-gray-500 mb-0.5">Institution</div>
-                    <div className="text-sm font-medium text-gray-900">
-                      {selectedCollaborator.institution}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-2">About</h3>
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    {selectedCollaborator.bio}
-                  </p>
-                </div>
-
-                <div className="space-y-4 mb-6">
-                  <DetailTagSection
-                    label="Role"
-                    color="blue"
-                    values={[selectedCollaborator.role.charAt(0).toUpperCase() + selectedCollaborator.role.slice(1)]}
-                  />
-                  <DetailTagSection
-                    label="Reasons"
-                    color="purple"
-                    values={selectedCollaborator.collaborationIntent}
-                  />
-                  <DetailTagSection
-                    label="Interests"
-                    color="gray"
-                    values={selectedCollaborator.topicAreas}
-                  />
-                  <DetailTagSection
-                    label="Skills"
-                    color="orange"
-                    values={selectedCollaborator.skills}
-                  />
-                  <DetailTagSection
-                    label="Location"
-                    color="teal"
-                    values={[selectedCollaborator.institution]}
-                  />
-                  <DetailTagSection
-                    label="Availability"
-                    color="green"
-                    values={[selectedCollaborator.availability.charAt(0).toUpperCase() + selectedCollaborator.availability.slice(1).replace(/-/g, ' ')]}
-                  />
-                  <DetailTagSection
-                    label="Preference of Org"
-                    color="rose"
-                    values={selectedCollaborator.preferredOrgType}
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <button className="w-full px-6 py-3 bg-gray-900 text-white font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
-                    <Mail className="h-5 w-5" />
-                    Connect
-                  </button>
-                  <button className="w-full px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2">
-                    View Full Profile
-                    <ChevronRight className="h-5 w-5" />
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       {/* Edit Criteria Panel */}
