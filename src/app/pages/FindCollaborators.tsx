@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
 import {
   Search, SlidersHorizontal, UserCircle2,
-  Loader2, X, ExternalLink, ChevronDown, ChevronUp, Lock,
+  Loader2, X, ExternalLink, ChevronDown, Lock, MapPin,
 } from "lucide-react";
 import { ContactModal } from "../components/ContactModal";
 import DiscoverMap from "./DiscoverMap";
@@ -251,6 +251,25 @@ function deriveProjectFallback(profile: OrcidProfile | undefined): string[] {
   ).slice(0, 5);
 }
 
+function isLikelyPersonName(givenName: string, familyName: string): boolean {
+  const full = `${givenName} ${familyName}`.trim().toLowerCase();
+  if (!full) return false;
+
+  // Filter obvious organization/institution records that ORCID may expose.
+  const orgIndicators = [
+    "healthcare", "hospital", "clinic", "university", "institute", "consultancy",
+    "consulting", "consultant", "agency", "marketing", "holdings", "ministry",
+    "school", "college", "ltd", "llc", "inc", "pvt", "online", "digital health",
+    "center", "centre", "system", "services",
+  ];
+
+  if (orgIndicators.some((term) => full.includes(term))) return false;
+
+  // Personal names should be alphabetic-ish and have at least 2 chars each side.
+  const simpleName = /^[a-zA-Z][a-zA-Z' .-]{1,}$/;
+  return simpleName.test(givenName) && simpleName.test(familyName);
+}
+
 // ─── Chip colour palette ──────────────────────────────────────────────────────
 
 type TagColor = "blue" | "purple" | "gray" | "orange" | "teal" | "green" | "rose";
@@ -370,8 +389,6 @@ export default function FindCollaborators() {
   const [browseSearching, setBrowseSearching] = useState(false);
   const [browseLoadingNames, setBrowseLoadingNames] = useState(false);
   const [browseError, setBrowseError] = useState<string | null>(null);
-  const [browseExpandedId, setBrowseExpandedId] = useState<string | null>(null);
-  const [browseLoadingProfile, setBrowseLoadingProfile] = useState<string | null>(null);
   const browseBatchSignal = useRef<{ cancelled: boolean }>({ cancelled: false });
   const browseInputRef = useRef<HTMLInputElement>(null);
 
@@ -390,7 +407,6 @@ export default function FindCollaborators() {
     setBrowseLoadingNames(false);
     setBrowseError(null);
     setBrowseProfiles({});
-    setBrowseExpandedId(null);
 
     searchOrcid(effectiveQuery)
       .then((res) => {
@@ -424,23 +440,6 @@ export default function FindCollaborators() {
 
   // ── Browse helpers ────────────────────────────────────────────────────────
 
-  const toggleBrowseExpand = useCallback(
-    async (orcidId: string) => {
-      if (browseExpandedId === orcidId) { setBrowseExpandedId(null); return; }
-      setBrowseExpandedId(orcidId);
-      if (browseProfiles[orcidId]) return;
-      setBrowseLoadingProfile(orcidId);
-      try {
-        const p = await fetchOrcidProfile(orcidId);
-        setBrowseProfiles((prev) => ({ ...prev, [orcidId]: p }));
-        enrichOrcidProfile(p).then((enriched) => {
-          if (enriched) setBrowseEnriched((prev) => ({ ...prev, [orcidId]: enriched }));
-        });
-      } catch { /* silent */ } finally { setBrowseLoadingProfile(null); }
-    },
-    [browseExpandedId, browseProfiles],
-  );
-
   const handleFilterChange = (key: keyof ActiveFilters, value: string) =>
     setActiveFilters((prev) => ({ ...prev, [key]: toggleItem(prev[key], value) }));
 
@@ -451,7 +450,6 @@ export default function FindCollaborators() {
     setBrowseQuery("");
     setBrowseResults([]);
     setBrowseProfiles({});
-    setBrowseExpandedId(null);
     setBrowseLoadingNames(false);
     browseInputRef.current?.focus();
   };
@@ -462,17 +460,23 @@ export default function FindCollaborators() {
     result,
     profile,
     enriched,
-    isExpanded,
-    isLoadingProfile,
-    onToggleExpand,
   }: {
     result: OrcidSearchResult;
     profile: OrcidProfile | undefined;
     enriched: EnrichedProfile | undefined;
-    isExpanded: boolean;
-    isLoadingProfile: boolean;
-    onToggleExpand: (id: string) => void;
   }) {
+    const containsNameFragment = (value: string, givenName: string, familyName: string) => {
+      const normalized = value.toLowerCase().trim();
+      const given = givenName.toLowerCase().trim();
+      const family = familyName.toLowerCase().trim();
+      const full = `${given} ${family}`.trim();
+      if (!normalized) return false;
+      if (full && (normalized === full || normalized.includes(full))) return true;
+      if (given && normalized === given) return true;
+      if (family && normalized === family) return true;
+      return false;
+    };
+
     const displayName = profile
       ? [profile.name.givenNames, profile.name.familyName].filter(Boolean).join(" ") || result.orcidId
       : null;
@@ -480,6 +484,16 @@ export default function FindCollaborators() {
     const interestValues = enriched?.inferredInterests.length
       ? enriched.inferredInterests
       : deriveInterestFallback(profile);
+    const domainValues = profile
+      ? interestValues.filter(
+          (value) =>
+            !containsNameFragment(
+              value,
+              profile.name.givenNames ?? "",
+              profile.name.familyName ?? "",
+            ),
+        )
+      : interestValues;
     const skillValues = enriched?.inferredSkills.length
       ? enriched.inferredSkills
       : deriveSkillFallback(profile);
@@ -492,6 +506,9 @@ export default function FindCollaborators() {
     const hasProjects = Boolean(
       projectValues.length > 0 || (profile && profile.works.length > 0),
     );
+    const hasAffiliations = Boolean(profile && profile.affiliations.length > 0);
+    const hasDomains = domainValues.length > 0;
+    const hasSkills = skillValues.length > 0;
     const initials = displayName
       ? displayName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
       : null;
@@ -519,9 +536,6 @@ export default function FindCollaborators() {
                     {primaryAff?.role && (
                       <p className="text-[13px] text-gray-600 mt-0.5">{primaryAff.role}</p>
                     )}
-                    {primaryAff?.organization && (
-                      <p className="text-[12px] text-gray-500 mt-1">{primaryAff.organization}</p>
-                    )}
                   </>
                 ) : (
                   <>
@@ -541,92 +555,54 @@ export default function FindCollaborators() {
               </a>
             </div>
 
-            {/* Contact email */}
-            {profile?.emails?.[0] && (
-              <p className="text-[12px] text-gray-500">{profile.emails[0]}</p>
-            )}
-
-            {/* AI summary — shown when enrichment arrives */}
-            {enriched?.summary && (
-              <p className="text-[12px] text-gray-600 leading-relaxed italic border-l-2 border-purple-200 pl-3">
-                {enriched.summary}
-                <AiBadge />
-              </p>
-            )}
-
-            {/* Role — enriched first, fall back to affiliation */}
-            <TagSection
-              label="Role"
-              color="blue"
-              values={primaryAff?.role ? [primaryAff.role] : []}
-              max={1}
-            />
-
-            {/* Reasons — AI only */}
-            {enriched && enriched.inferredReasons.length > 0 && (
-              <TagSection label="Reasons" color="purple" values={enriched.inferredReasons} max={2} badgeLabel="AI" />
-            )}
-
-            {/* Interests — enriched expands/replaces raw keywords */}
-            <TagSection
-              label="Interests"
-              color="gray"
-              values={interestValues}
-              max={2}
-              badgeLabel={interestSource}
-              emptyText={profile ? "No interests found yet" : undefined}
-            />
-
-            <TagSection
-              label="Skills"
-              color="orange"
-              values={skillValues}
-              max={2}
-              badgeLabel={skillSource}
-              emptyText={profile ? "Awaiting AI-enriched skills" : undefined}
-            />
-
-            {/* Location — affiliation org as proxy */}
             {primaryAff?.organization && (
-              <TagSection label="Location" color="teal" values={[primaryAff.organization]} max={1} />
+              <div className="flex items-center gap-2 text-[12px] text-gray-500">
+                <MapPin className="h-3.5 w-3.5 text-cyan-500" />
+                <span>{primaryAff.organization}</span>
+              </div>
             )}
 
-            {/* Availability — AI only */}
-            {enriched?.inferredAvailability && (
-              <TagSection label="Availability" color="green" values={[enriched.inferredAvailability]} max={1} badgeLabel="AI" />
-            )}
-
-            {/* Preference of Org — AI only */}
-            {enriched && enriched.inferredOrgPreference.length > 0 && (
-              <TagSection label="Preference of Org" color="rose" values={enriched.inferredOrgPreference} max={1} badgeLabel="AI" />
-            )}
-
-            <TagSection
-              label="Past Projects"
-              color="purple"
-              values={projectValues}
-              max={2}
-              badgeLabel={projectSource}
-              emptyText={profile ? "Open card for publications" : undefined}
-            />
-
-            {/* Affiliations */}
-            {profile && profile.affiliations.length > 0 && (
+            {hasAffiliations && (
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5 text-blue-600">
+                <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5 text-gray-500">
                   Affiliations
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {profile.affiliations.slice(0, 3).map((a, i) => (
-                    <span key={i} className={`px-2 py-1 text-[11px] border rounded-md ${chipColors.blue}`}>
+                  {profile!.affiliations.slice(0, 3).map((a, i) => (
+                    <span key={i} className="px-2 py-1 text-[11px] border rounded-md bg-gray-50 text-gray-700 border-gray-200">
                       {a.organization}{a.role ? ` · ${a.role}` : ""}
                     </span>
                   ))}
-                  {profile.affiliations.length > 3 && (
-                    <span className={`px-2 py-1 text-[11px] border rounded-md ${chipColors.gray}`}>
-                      +{profile.affiliations.length - 3} more
+                </div>
+              </div>
+            )}
+
+            {hasDomains && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5 text-gray-500">
+                  Domains
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {domainValues.slice(0, 4).map((domain, i) => (
+                    <span key={i} className="px-2 py-1 text-[11px] border rounded-md bg-gray-50 text-gray-700 border-gray-200">
+                      {domain}
                     </span>
-                  )}
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {hasSkills && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5 text-gray-500">
+                  Skills
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {skillValues.slice(0, 4).map((skill, i) => (
+                    <span key={i} className="px-2 py-1 text-[11px] border rounded-md bg-gray-50 text-gray-700 border-gray-200">
+                      {skill}
+                    </span>
+                  ))}
                 </div>
               </div>
             )}
@@ -634,63 +610,40 @@ export default function FindCollaborators() {
             {/* Past Projects (AI-inferred) + Publications (ORCID) — toggled */}
             {hasProjects ? (
               <div>
-                <button
-                  onClick={() => onToggleExpand(result.orcidId)}
-                  className="text-[11px] font-semibold uppercase tracking-wide text-blue-600 mb-1.5 flex items-center gap-1 hover:text-blue-800 transition-colors"
-                >
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1.5">
                   Past Projects & Publications
-                  {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                </button>
-                {isExpanded && (
-                  <div className="space-y-2">
-                    {/* AI-inferred projects shown first */}
-                    {enriched && enriched.inferredProjects.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {enriched.inferredProjects.map((p, i) => (
-                          <span key={i} className={`px-2 py-1 text-[11px] border rounded-md ${chipColors.purple}`}>
-                            {p}<AiBadge inline />
+                </p>
+                <div className="space-y-2">
+                  {/* AI-inferred projects shown first */}
+                  {enriched && enriched.inferredProjects.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {enriched.inferredProjects.map((p, i) => (
+                        <span key={i} className="px-2 py-1 text-[11px] border rounded-md bg-gray-50 text-gray-700 border-gray-200">
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {/* ORCID works below */}
+                  {profile && profile.works.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {profile.works.map((w, i) =>
+                        w.url ? (
+                          <a key={i} href={w.url} target="_blank" rel="noopener noreferrer"
+                            className="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-100 bg-gray-50 text-gray-700 border-gray-200">
+                            {w.title}{w.year ? ` (${w.year})` : ""}
+                          </a>
+                        ) : (
+                          <span key={i} className="px-2 py-1 text-[11px] border rounded-md bg-gray-50 text-gray-700 border-gray-200">
+                            {w.title}{w.year ? ` (${w.year})` : ""}
                           </span>
-                        ))}
-                      </div>
-                    )}
-                    {/* ORCID works below */}
-                    {profile && profile.works.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {profile.works.map((w, i) =>
-                          w.url ? (
-                            <a key={i} href={w.url} target="_blank" rel="noopener noreferrer"
-                              className={`px-2 py-1 text-[11px] border rounded-md hover:opacity-80 ${chipColors.blue}`}>
-                              {w.title}{w.year ? ` (${w.year})` : ""}
-                            </a>
-                          ) : (
-                            <span key={i} className={`px-2 py-1 text-[11px] border rounded-md ${chipColors.blue}`}>
-                              {w.title}{w.year ? ` (${w.year})` : ""}
-                            </span>
-                          )
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+                        )
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : null}
-
-            {/* Biography — only when expanded */}
-            {profile?.biography && isExpanded && (
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">
-                  Biography
-                </p>
-                <p className="text-[12px] text-gray-600 leading-relaxed">{profile.biography}</p>
-              </div>
-            )}
-
-            {/* Loading state */}
-            {!profile && isLoadingProfile && (
-              <div className="flex items-center gap-2 text-[12px] text-gray-400">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />Loading profile…
-              </div>
-            )}
 
             {/* Actions */}
             <div className="flex gap-2 pt-1">
@@ -702,14 +655,6 @@ export default function FindCollaborators() {
                   Contact
                 </button>
               )}
-              <a
-                href={`https://orcid.org/${result.orcidId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 text-[13px] font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-md transition-colors flex items-center gap-1.5"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />View on ORCID
-              </a>
             </div>
           </div>
         </div>
@@ -734,22 +679,18 @@ export default function FindCollaborators() {
     if (!searching && !error && query && results.length === 0) return (
       <p className="text-[13px] text-gray-500 mb-4">No results found for "{query}".</p>
     );
-    if (results.length > 0) return (
+    if (results.length > 0 && loadingNames) return (
       <div className="flex items-center gap-2 mb-4">
-        <p className="text-[12px] text-gray-500">{results.length} results found</p>
-        {loadingNames && (
-          <span className="flex items-center gap-1 text-[11px] text-gray-400">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Resolving names… {resolvedCount}/{results.length}
-          </span>
-        )}
+        <span className="flex items-center gap-1 text-[11px] text-gray-400">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Resolving names… {resolvedCount}/{results.length}
+        </span>
       </div>
     );
     return null;
   }
 
   const filterCount = activeFilterCount(activeFilters);
-  const browseResolvedCount = browseResults.filter((r) => browseProfiles[r.orcidId]).length;
   const browseHasQuery = !!(debouncedBrowseQuery.trim() || filterCount > 0);
   const displayedBrowseResults = useMemo(() => {
     if (browseSortBy === "best-match") return browseResults;
@@ -763,6 +704,26 @@ export default function FindCollaborators() {
       return aName.localeCompare(bName);
     });
   }, [browseResults, browseSortBy, browseProfiles]);
+  const browseRenderableResults = useMemo(() => {
+    return displayedBrowseResults.filter((r) => {
+      const profile = browseProfiles[r.orcidId];
+      if (!profile) return false;
+      const givenName = profile.name.givenNames?.trim() ?? "";
+      const familyName = profile.name.familyName?.trim() ?? "";
+      // Require both parts of a personal name to avoid institution-only ORCID records.
+      if (!givenName || !familyName) return false;
+      if (!isLikelyPersonName(givenName, familyName)) return false;
+      const hasInfo = Boolean(
+        profile.affiliations.length > 0 ||
+        profile.keywords.length > 0 ||
+        profile.works.length > 0 ||
+        profile.biography ||
+        profile.emails.length > 0
+      );
+      return hasInfo;
+    });
+  }, [displayedBrowseResults, browseProfiles]);
+  const browseResolvedCount = browseRenderableResults.filter((r) => browseProfiles[r.orcidId]).length;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -888,7 +849,7 @@ export default function FindCollaborators() {
                     </div>
                   </div>
                   <div className="border border-gray-200 rounded-md p-3">
-                    <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-2">Interests</p>
+                    <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-2">Domains</p>
                     <div className="flex flex-wrap gap-1.5">
                       {FILTER_OPTIONS.interests.map((option) => {
                         const selected = activeFilters.interests.includes(option);
@@ -930,7 +891,7 @@ export default function FindCollaborators() {
                     </div>
                   </div>
                   <div className="border border-gray-200 rounded-md p-3">
-                    <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-2">Location</p>
+                    <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-2">Institution</p>
                     <div className="flex flex-wrap gap-1.5">
                       {FILTER_OPTIONS.location.map((option) => {
                         const selected = activeFilters.location.includes(option);
@@ -991,14 +952,14 @@ export default function FindCollaborators() {
               searching={browseSearching}
               error={browseError}
               query={debouncedBrowseQuery || (filterCount > 0 ? "(filters active)" : "default")}
-              results={browseResults}
+              results={browseRenderableResults}
               loadingNames={browseLoadingNames}
               resolvedCount={browseResolvedCount}
             />
 
             <div className="mb-4 flex items-center justify-between">
               <p className="text-[13px] text-gray-600">
-                <span className="font-semibold text-gray-900">{displayedBrowseResults.length}</span> collaborators found
+                <span className="font-semibold text-gray-900">{browseRenderableResults.length}</span> collaborators found
               </p>
               <div className="flex items-center gap-2">
                 <span className="text-[12px] text-gray-500">Sort by:</span>
@@ -1014,15 +975,12 @@ export default function FindCollaborators() {
             </div>
 
             <div className="space-y-4">
-              {displayedBrowseResults.map((r) => (
+              {browseRenderableResults.map((r) => (
                 <OrcidCard
                   key={r.orcidId}
                   result={r}
                   profile={browseProfiles[r.orcidId]}
                   enriched={browseEnriched[r.orcidId]}
-                  isExpanded={browseExpandedId === r.orcidId}
-                  isLoadingProfile={browseLoadingProfile === r.orcidId}
-                  onToggleExpand={toggleBrowseExpand}
                 />
               ))}
             </div>
