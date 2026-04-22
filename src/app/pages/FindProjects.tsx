@@ -1,7 +1,108 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
 import { Search, ChevronDown, MapPin, TrendingUp, X, Lock } from "lucide-react";
+
+const DOMAIN_OPTIONS = [
+  "Cardiology", "Oncology", "Neurology", "Pediatrics", "Emergency Medicine",
+  "Surgery", "Wearable Tech", "AI/ML", "Robotics", "Telemedicine",
+  "Medical Devices", "Healthcare IT",
+];
+
+const SKILL_OPTIONS = [
+  "Clinical Research", "UX Design", "Machine Learning", "Data Analysis",
+  "Product Design", "Software Development", "Medical Imaging",
+  "User Research", "Prototyping", "Systems Thinking",
+];
+
+const INTEREST_OPTIONS = [
+  "Find research collaborators", "Join an existing project", "Start a new initiative",
+  "Share my expertise", "Learn from others", "Validate an idea",
+];
+
+function MultiSelect({
+  placeholder,
+  options,
+  selected,
+  onChange,
+}: {
+  placeholder: string;
+  options: string[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [canScrollMore, setCanScrollMore] = useState(true);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const handleScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    setCanScrollMore(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+  };
+
+  useEffect(() => {
+    if (open) setCanScrollMore(true);
+  }, [open]);
+
+  const toggle = (val: string) =>
+    onChange(selected.includes(val) ? selected.filter(v => v !== val) : [...selected, val]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-[13px] border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <span className={selected.length ? "text-gray-900" : "text-gray-400"}>
+          {selected.length ? `${selected.length} selected` : placeholder}
+        </span>
+        <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg">
+          <div
+            ref={listRef}
+            onScroll={handleScroll}
+            className="max-h-48 overflow-y-auto"
+          >
+            {options.map(opt => (
+              <label
+                key={opt}
+                className="flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-gray-50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(opt)}
+                  onChange={() => toggle(opt)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-gray-900 accent-gray-900"
+                />
+                <span className={selected.includes(opt) ? "text-gray-900 font-medium" : "text-gray-700"}>
+                  {opt}
+                </span>
+              </label>
+            ))}
+          </div>
+          {canScrollMore && (
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 rounded-b-md bg-gradient-to-t from-white to-transparent flex items-end justify-center pb-1">
+              <span className="text-[10px] text-gray-400">scroll for more</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 import imgRobot from "../../assets/0dd2934842d6fa9897708ea0e164b300c59f584e.png";
 import { MatchExplanation } from "../components/MatchExplanation";
 import { useBookmarks } from "../context/BookmarksContext";
@@ -27,9 +128,9 @@ export default function FindProjects() {
   const { session } = useAuth();
   const [activeTab, setActiveTab] = useState<"browse" | "discover">("browse");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedDomain, setSelectedDomain] = useState("");
-  const [selectedSkill, setSelectedSkill] = useState("");
-  const [selectedInterest, setSelectedInterest] = useState("");
+  const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [selectedInstitution, setSelectedInstitution] = useState("");
   const [selectedProximity, setSelectedProximity] = useState("");
   const [showMatchExplanation, setShowMatchExplanation] = useState(false);
@@ -90,10 +191,16 @@ export default function FindProjects() {
   ];
 
   // Check if any search/filter is active
-  const hasActiveSearch = searchQuery || selectedDomain || selectedSkill || selectedInterest || selectedInstitution || selectedProximity;
+  const hasActiveSearch = searchQuery || selectedDomains.length || selectedSkills.length || selectedInterests.length || selectedInstitution || selectedProximity;
 
   const filteredProjects = projects.filter(project => {
-    if (selectedInterest && !project.tags.some(tag => tag.toLowerCase().includes(selectedInterest.toLowerCase()))) {
+    if (selectedDomains.length && !selectedDomains.some(d => project.tags.some(t => t.toLowerCase().includes(d.toLowerCase())))) {
+      return false;
+    }
+    if (selectedSkills.length && !selectedSkills.some(s => project.tags.some(t => t.toLowerCase().includes(s.toLowerCase())))) {
+      return false;
+    }
+    if (selectedInterests.length && !selectedInterests.some(i => project.tags.some(t => t.toLowerCase().includes(i.toLowerCase())))) {
       return false;
     }
     if (searchQuery && !project.name.toLowerCase().includes(searchQuery.toLowerCase())) {
@@ -227,37 +334,28 @@ export default function FindProjects() {
           <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
               {/* Domains */}
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Domains"
-                  value={selectedDomain}
-                  onChange={(e) => setSelectedDomain(e.target.value)}
-                  className="w-full px-3 py-2 text-[13px] border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+              <MultiSelect
+                placeholder="Domains"
+                options={DOMAIN_OPTIONS}
+                selected={selectedDomains}
+                onChange={setSelectedDomains}
+              />
 
               {/* Skills */}
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Skills"
-                  value={selectedSkill}
-                  onChange={(e) => setSelectedSkill(e.target.value)}
-                  className="w-full px-3 py-2 text-[13px] border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+              <MultiSelect
+                placeholder="Skills"
+                options={SKILL_OPTIONS}
+                selected={selectedSkills}
+                onChange={setSelectedSkills}
+              />
 
               {/* Interests */}
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Interests"
-                  value={selectedInterest}
-                  onChange={(e) => setSelectedInterest(e.target.value)}
-                  className="w-full px-3 py-2 text-[13px] border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+              <MultiSelect
+                placeholder="Interests"
+                options={INTEREST_OPTIONS}
+                selected={selectedInterests}
+                onChange={setSelectedInterests}
+              />
 
               {/* Institution */}
               <div className="relative">
@@ -309,17 +407,27 @@ export default function FindProjects() {
             </div>
 
             {/* Active Filters */}
-            {(selectedInterest || selectedInstitution || selectedProximity) && (
-              <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
+            {(selectedDomains.length > 0 || selectedSkills.length > 0 || selectedInterests.length > 0 || selectedInstitution || selectedProximity) && (
+              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-200">
                 <span className="text-[11px] text-gray-500 font-medium">Active filters:</span>
-                {selectedInterest && (
-                  <span className="px-2 py-1 bg-blue-50 text-blue-700 text-[11px] font-medium rounded-md border border-blue-200 flex items-center gap-1">
-                    {selectedInterest}
-                    <button onClick={() => setSelectedInterest("")} className="hover:bg-blue-100 rounded">
-                      <X className="h-3 w-3" />
-                    </button>
+                {selectedDomains.map(d => (
+                  <span key={d} className="px-2 py-1 bg-blue-50 text-blue-700 text-[11px] font-medium rounded-md border border-blue-200 flex items-center gap-1">
+                    {d}
+                    <button onClick={() => setSelectedDomains(selectedDomains.filter(v => v !== d))} className="hover:bg-blue-100 rounded"><X className="h-3 w-3" /></button>
                   </span>
-                )}
+                ))}
+                {selectedSkills.map(s => (
+                  <span key={s} className="px-2 py-1 bg-purple-50 text-purple-700 text-[11px] font-medium rounded-md border border-purple-200 flex items-center gap-1">
+                    {s}
+                    <button onClick={() => setSelectedSkills(selectedSkills.filter(v => v !== s))} className="hover:bg-purple-100 rounded"><X className="h-3 w-3" /></button>
+                  </span>
+                ))}
+                {selectedInterests.map(i => (
+                  <span key={i} className="px-2 py-1 bg-green-50 text-green-700 text-[11px] font-medium rounded-md border border-green-200 flex items-center gap-1">
+                    {i}
+                    <button onClick={() => setSelectedInterests(selectedInterests.filter(v => v !== i))} className="hover:bg-green-100 rounded"><X className="h-3 w-3" /></button>
+                  </span>
+                ))}
               </div>
             )}
           </div>
