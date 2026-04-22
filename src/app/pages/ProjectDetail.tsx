@@ -11,6 +11,7 @@ import { useState, useEffect } from "react";
 import { MatchExplanation } from "../components/MatchExplanation";
 import { useBookmarks } from "../context/BookmarksContext";
 import { useAuth } from "../context/AuthContext";
+import { ContactModal } from "../components/ContactModal";
 
 interface TeamMember {
   name: string;
@@ -45,6 +46,13 @@ interface ProjectData {
   images: string[];
   matchFactors: { category: string; score: number; reason: string; isMatch: boolean }[];
 }
+
+const PROJECT_COORDINATORS: Record<string, { name: string; email: string }> = {
+  robodog: { name: "Dr. Bryan Carroll", email: "bcarroll@uhcleveland.edu" },
+  "burnout-prevention": { name: "Dr. Susan Stern", email: "sstern@uhcleveland.edu" },
+  smartsuture: { name: "Dr. Rachel Kim", email: "rkim@cwru.edu" },
+  medassist: { name: "Dr. Angela Foster", email: "afoster@clevelandclinic.org" },
+};
 
 const projectsData: Record<string, ProjectData> = {
   robodog: {
@@ -237,8 +245,10 @@ export default function ProjectDetail() {
   const { session } = useAuth();
   const [showMatchExplanation, setShowMatchExplanation] = useState(false);
   const [expandedUpdate, setExpandedUpdate] = useState<number | null>(null);
+  const [showContactModal, setShowContactModal] = useState(false);
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const project = projectsData[id ?? ""] ?? projectsData["robodog"];
+  const coordinator = PROJECT_COORDINATORS[project.id];
 
   const projectUpdates = [
     {
@@ -375,7 +385,10 @@ export default function ProjectDetail() {
                       >
                         {isBookmarked(project.id) ? "Following" : "Stay Updated"}
                       </button>
-                      <button className="px-4 py-2 text-[13px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors whitespace-nowrap">
+                      <button
+                        onClick={() => setShowContactModal(true)}
+                        className="px-4 py-2 text-[13px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors whitespace-nowrap"
+                      >
                         Contact Project Coordinator
                       </button>
                     </div>
@@ -678,6 +691,14 @@ export default function ProjectDetail() {
           projectName={project.name}
           factors={project.matchFactors}
           onClose={() => setShowMatchExplanation(false)}
+        />
+      )}
+
+      {showContactModal && coordinator && (
+        <ContactModal
+          recipientName={coordinator.name}
+          recipientEmail={coordinator.email}
+          onClose={() => setShowContactModal(false)}
         />
       )}
     </div>
