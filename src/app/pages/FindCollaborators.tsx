@@ -251,6 +251,37 @@ function deriveProjectFallback(profile: OrcidProfile | undefined): string[] {
   ).slice(0, 5);
 }
 
+type DefaultPrefetchPayload = {
+  results: OrcidSearchResult[];
+  profiles: Record<string, OrcidProfile>;
+};
+
+let defaultCollaboratorPrefetchPromise: Promise<DefaultPrefetchPayload> | null = null;
+
+function startDefaultCollaboratorPrefetch(): Promise<DefaultPrefetchPayload> {
+  if (!defaultCollaboratorPrefetchPromise) {
+    defaultCollaboratorPrefetchPromise = (async () => {
+      const results = await searchOrcid("healthcare");
+      const profiles: Record<string, OrcidProfile> = {};
+      const signal = { cancelled: false };
+      await batchFetch(
+        results.map((r) => r.orcidId),
+        fetchOrcidProfile,
+        3,
+        (id, profile) => {
+          profiles[id] = profile;
+        },
+        signal,
+      );
+      return { results, profiles };
+    })().catch(() => ({ results: [], profiles: {} }));
+  }
+  return defaultCollaboratorPrefetchPromise;
+}
+
+// Kick off default collaborator prefetch on module load.
+void startDefaultCollaboratorPrefetch();
+
 function isLikelyPersonName(givenName: string, familyName: string): boolean {
   const full = `${givenName} ${familyName}`.trim().toLowerCase();
   if (!full) return false;
@@ -410,6 +441,36 @@ export default function FindCollaborators() {
     setBrowseError(null);
     setBrowseInitialized(false);
     setBrowseProfiles({});
+
+    if (isDefaultLoad) {
+      startDefaultCollaboratorPrefetch()
+        .then(({ results, profiles }) => {
+          if (cancelled) return;
+          setBrowseResults(results);
+          setBrowseProfiles(profiles);
+          setBrowseSearching(false);
+          setBrowseLoadingNames(false);
+          setBrowseInitialized(true);
+
+          // Enrich resolved profiles in the background.
+          Object.entries(profiles).forEach(([id, profile]) => {
+            enrichOrcidProfile(profile).then((enriched) => {
+              if (enriched && !signal.cancelled) {
+                setBrowseEnriched((prev) => ({ ...prev, [id]: enriched }));
+              }
+            });
+          });
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setBrowseError("Unable to load collaborators right now. Please try again.");
+            setBrowseSearching(false);
+            setBrowseInitialized(true);
+          }
+        });
+
+      return () => { cancelled = true; signal.cancelled = true; };
+    }
 
     searchOrcid(effectiveQuery)
       .then((res) => {
