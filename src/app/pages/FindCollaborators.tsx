@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
 import {
@@ -362,6 +362,7 @@ export default function FindCollaborators() {
   const debouncedBrowseQuery = useDebounce(browseQuery, 400);
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [browseSortBy, setBrowseSortBy] = useState<"best-match" | "alphabetical">("best-match");
 
   const [browseResults, setBrowseResults] = useState<OrcidSearchResult[]>([]);
   const [browseProfiles, setBrowseProfiles] = useState<Record<string, OrcidProfile>>({});
@@ -378,14 +379,7 @@ export default function FindCollaborators() {
 
   useEffect(() => {
     const query = buildOrcidQuery(debouncedBrowseQuery, activeFilters);
-
-    if (!query.trim()) {
-      setBrowseResults([]);
-      setBrowseProfiles({});
-      setBrowseError(null);
-      setBrowseLoadingNames(false);
-      return;
-    }
+    const effectiveQuery = query.trim() || "healthcare";
 
     browseBatchSignal.current.cancelled = true;
     const signal = { cancelled: false };
@@ -398,7 +392,7 @@ export default function FindCollaborators() {
     setBrowseProfiles({});
     setBrowseExpandedId(null);
 
-    searchOrcid(query)
+    searchOrcid(effectiveQuery)
       .then((res) => {
         if (cancelled) return;
         setBrowseResults(res);
@@ -503,8 +497,8 @@ export default function FindCollaborators() {
       : null;
 
     return (
-      <div className="bg-white border border-gray-200 rounded-lg p-5 hover:border-gray-300 transition-colors">
-        <div className="flex gap-5">
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-gray-300 transition-all hover:shadow-sm">
+        <div className="flex gap-6 p-6">
           {/* Avatar */}
           <div className="flex-shrink-0">
             <div className="w-14 h-14 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-center">
@@ -757,6 +751,18 @@ export default function FindCollaborators() {
   const filterCount = activeFilterCount(activeFilters);
   const browseResolvedCount = browseResults.filter((r) => browseProfiles[r.orcidId]).length;
   const browseHasQuery = !!(debouncedBrowseQuery.trim() || filterCount > 0);
+  const displayedBrowseResults = useMemo(() => {
+    if (browseSortBy === "best-match") return browseResults;
+    return [...browseResults].sort((a, b) => {
+      const aName = browseProfiles[a.orcidId]
+        ? [browseProfiles[a.orcidId].name.givenNames, browseProfiles[a.orcidId].name.familyName].filter(Boolean).join(" ")
+        : a.orcidId;
+      const bName = browseProfiles[b.orcidId]
+        ? [browseProfiles[b.orcidId].name.givenNames, browseProfiles[b.orcidId].name.familyName].filter(Boolean).join(" ")
+        : b.orcidId;
+      return aName.localeCompare(bName);
+    });
+  }, [browseResults, browseSortBy, browseProfiles]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -981,30 +987,34 @@ export default function FindCollaborators() {
               </div>
             )}
 
-            {/* Empty prompt */}
-            {!browseHasQuery && !browseSearching && browseResults.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                  <Search className="h-5 w-5 text-gray-400" />
-                </div>
-                <p className="text-[14px] font-medium text-gray-700 mb-1">Search to find collaborators</p>
-                <p className="text-[13px] text-gray-500 max-w-sm">
-                  Search the public ORCID registry above, then use filters to narrow by role, interests, skills, or institution.
-                </p>
-              </div>
-            )}
-
             <SearchStatus
               searching={browseSearching}
               error={browseError}
-              query={debouncedBrowseQuery || (filterCount > 0 ? "(filters active)" : "")}
+              query={debouncedBrowseQuery || (filterCount > 0 ? "(filters active)" : "default")}
               results={browseResults}
               loadingNames={browseLoadingNames}
               resolvedCount={browseResolvedCount}
             />
 
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-[13px] text-gray-600">
+                <span className="font-semibold text-gray-900">{displayedBrowseResults.length}</span> collaborators found
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-gray-500">Sort by:</span>
+                <select
+                  value={browseSortBy}
+                  onChange={(e) => setBrowseSortBy(e.target.value as "best-match" | "alphabetical")}
+                  className="text-[12px] border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="best-match">Best Match</option>
+                  <option value="alphabetical">Alphabetically</option>
+                </select>
+              </div>
+            </div>
+
             <div className="space-y-4">
-              {browseResults.map((r) => (
+              {displayedBrowseResults.map((r) => (
                 <OrcidCard
                   key={r.orcidId}
                   result={r}
