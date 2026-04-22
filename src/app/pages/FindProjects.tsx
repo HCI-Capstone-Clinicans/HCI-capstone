@@ -64,7 +64,7 @@ function MultiSelect({
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-3 py-2 text-[13px] border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <span className={selected.length ? "text-gray-900" : "text-gray-400"}>
+        <span className="text-gray-900">
           {selected.length ? `${selected.length} selected` : placeholder}
         </span>
         <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
@@ -103,6 +103,72 @@ function MultiSelect({
     </div>
   );
 }
+
+function SingleSelect({
+  placeholder,
+  options,
+  value,
+  onChange,
+}: {
+  placeholder: string;
+  options: { label: string; value: string }[];
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const selectedLabel = options.find(o => o.value === value)?.label;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-[13px] border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <span className="text-gray-900">{selectedLabel ?? placeholder}</span>
+        <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden">
+          {value && (
+            <button
+              type="button"
+              onClick={() => { onChange(""); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-[13px] text-gray-400 hover:bg-gray-50 border-b border-gray-100"
+            >
+              Clear selection
+            </button>
+          )}
+          {options.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`w-full text-left px-3 py-2 text-[13px] transition-colors ${
+                value === opt.value
+                  ? "bg-gray-900 text-white"
+                  : "text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 import imgRobot from "../../assets/0dd2934842d6fa9897708ea0e164b300c59f584e.png";
 import { MatchExplanation } from "../components/MatchExplanation";
 import { useBookmarks } from "../context/BookmarksContext";
@@ -276,7 +342,7 @@ export default function FindProjects() {
               <div>
                 <h1 className="text-2xl font-semibold text-gray-900 mb-1">Clinician Connect</h1>
                 <p className="text-[15px] text-gray-500 italic">
-                  A cross-disciplinary platform to find collaborators and healthcare projects
+                  A platform to enable interdisciplinary collaboration on healthcare projects
                 </p>
               </div>
             </div>
@@ -358,35 +424,29 @@ export default function FindProjects() {
               />
 
               {/* Institution */}
-              <div className="relative">
-                <select
-                  value={selectedInstitution}
-                  onChange={(e) => setSelectedInstitution(e.target.value)}
-                  className="w-full px-3 py-2 text-[13px] border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white cursor-pointer"
-                >
-                  <option value="">Institution</option>
-                  <option value="uh">UH Cleveland Medical Center</option>
-                  <option value="clinic">Cleveland Clinic</option>
-                  <option value="cwru">Case Western Reserve University</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-              </div>
+              <SingleSelect
+                placeholder="Institution"
+                value={selectedInstitution}
+                onChange={setSelectedInstitution}
+                options={[
+                  { label: "UH Cleveland Medical Center", value: "uh" },
+                  { label: "Cleveland Clinic", value: "clinic" },
+                  { label: "Case Western Reserve University", value: "cwru" },
+                ]}
+              />
 
               {/* Proximity */}
-              <div className="relative">
-                <select
-                  value={selectedProximity}
-                  onChange={(e) => setSelectedProximity(e.target.value)}
-                  className="w-full px-3 py-2 text-[13px] border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white cursor-pointer"
-                >
-                  <option value="">Proximity</option>
-                  <option value="5">Within 5 miles</option>
-                  <option value="10">Within 10 miles</option>
-                  <option value="25">Within 25 miles</option>
-                  <option value="any">Any distance</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-              </div>
+              <SingleSelect
+                placeholder="Proximity"
+                value={selectedProximity}
+                onChange={setSelectedProximity}
+                options={[
+                  { label: "Within 5 miles", value: "5" },
+                  { label: "Within 10 miles", value: "10" },
+                  { label: "Within 25 miles", value: "25" },
+                  { label: "Any distance", value: "any" },
+                ]}
+              />
 
               {/* Keyword Search */}
               <div className="relative md:col-span-2 lg:col-span-2">
@@ -428,6 +488,27 @@ export default function FindProjects() {
                     <button onClick={() => setSelectedInterests(selectedInterests.filter(v => v !== i))} className="hover:bg-green-100 rounded"><X className="h-3 w-3" /></button>
                   </span>
                 ))}
+                {selectedInstitution && (
+                  <span className="px-2 py-1 bg-orange-50 text-orange-700 text-[11px] font-medium rounded-md border border-orange-200 flex items-center gap-1">
+                    {[
+                      { label: "UH Cleveland Medical Center", value: "uh" },
+                      { label: "Cleveland Clinic", value: "clinic" },
+                      { label: "Case Western Reserve University", value: "cwru" },
+                    ].find(o => o.value === selectedInstitution)?.label}
+                    <button onClick={() => setSelectedInstitution("")} className="hover:bg-orange-100 rounded"><X className="h-3 w-3" /></button>
+                  </span>
+                )}
+                {selectedProximity && (
+                  <span className="px-2 py-1 bg-orange-50 text-orange-700 text-[11px] font-medium rounded-md border border-orange-200 flex items-center gap-1">
+                    {[
+                      { label: "Within 5 miles", value: "5" },
+                      { label: "Within 10 miles", value: "10" },
+                      { label: "Within 25 miles", value: "25" },
+                      { label: "Any distance", value: "any" },
+                    ].find(o => o.value === selectedProximity)?.label}
+                    <button onClick={() => setSelectedProximity("")} className="hover:bg-orange-100 rounded"><X className="h-3 w-3" /></button>
+                  </span>
+                )}
               </div>
             )}
           </div>
