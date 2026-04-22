@@ -58,6 +58,90 @@ const FILTER_OPTIONS = {
   ],
 };
 
+function MultiSelect({
+  placeholder,
+  options,
+  selected,
+  onChange,
+}: {
+  placeholder: string;
+  options: string[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [canScrollMore, setCanScrollMore] = useState(true);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const handleScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    setCanScrollMore(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+  };
+
+  useEffect(() => {
+    if (open) setCanScrollMore(true);
+  }, [open]);
+
+  const toggle = (val: string) =>
+    onChange(selected.includes(val) ? selected.filter(v => v !== val) : [...selected, val]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-[13px] border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <span className="text-gray-900">
+          {selected.length ? `${selected.length} selected` : placeholder}
+        </span>
+        <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg">
+          <div
+            ref={listRef}
+            onScroll={handleScroll}
+            className="max-h-48 overflow-y-auto"
+          >
+            {options.map(opt => (
+              <label
+                key={opt}
+                className="flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-gray-50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(opt)}
+                  onChange={() => toggle(opt)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-gray-900 accent-gray-900"
+                />
+                <span className={selected.includes(opt) ? "text-gray-900 font-medium" : "text-gray-700"}>
+                  {opt}
+                </span>
+              </label>
+            ))}
+          </div>
+          {canScrollMore && (
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 rounded-b-md bg-gradient-to-t from-white to-transparent flex items-end justify-center pb-1">
+              <span className="text-[10px] text-gray-400">scroll for more</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Heuristic alias map ──────────────────────────────────────────────────────
 // Maps UI display labels → one or more ORCID keyword terms.
 // ORCID only supports: keyword:, affiliation-org-name:, given-names:,
@@ -349,100 +433,6 @@ function AiBadge({ inline = false }: { inline?: boolean }) {
 }
 
 // ─── Filter panel ─────────────────────────────────────────────────────────────
-
-function FilterPanel({
-  filters, onChange, onClear,
-}: {
-  filters: ActiveFilters;
-  onChange: (key: keyof ActiveFilters, value: string) => void;
-  onClear: () => void;
-}) {
-  type SectionDef = { key: keyof typeof FILTER_OPTIONS; label: string; color: TagColor };
-
-  const sections: SectionDef[] = [
-    { key: "role",            label: "Role",              color: "blue"   },
-    { key: "interests",       label: "Interests",         color: "purple" },
-    { key: "skills",          label: "Skills",            color: "orange" },
-    { key: "location",        label: "Location",          color: "orange" },
-  ];
-
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    role: true, interests: false, skills: false, location: false,
-  });
-  const toggleSection = (key: string) =>
-    setOpenSections((p) => ({ ...p, [key]: !p[key] }));
-
-  const total = activeFilterCount(filters);
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden mb-6">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <span className="text-[13px] font-semibold text-gray-900">
-          Filters{" "}
-          {total > 0 && (
-            <span className="ml-1 px-1.5 py-0.5 text-[11px] bg-gray-900 text-white rounded-full">
-              {total}
-            </span>
-          )}
-        </span>
-        {total > 0 && (
-          <button onClick={onClear} className="text-[12px] text-gray-500 hover:text-gray-700 transition-colors">
-            Clear all
-          </button>
-        )}
-      </div>
-
-      {sections.map((s) => {
-        const active = filters[s.key] ?? [];
-        const isOpen = openSections[s.key];
-
-        return (
-          <div key={s.key} className="border-b border-gray-100 last:border-0">
-            <button
-              onClick={() => toggleSection(s.key)}
-              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors"
-            >
-              <span className={`text-[12px] font-semibold uppercase tracking-wide flex items-center gap-1.5 ${labelColors[s.color]}`}>
-                {s.label}
-                {active.length > 0 && (
-                  <span className={`px-1.5 py-0.5 text-[10px] rounded-full border ${chipColors[s.color]}`}>
-                    {active.length}
-                  </span>
-                )}
-              </span>
-              {isOpen
-                ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
-                : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />}
-            </button>
-
-            {isOpen && (
-              <div className="px-4 pb-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {(FILTER_OPTIONS[s.key as keyof typeof FILTER_OPTIONS] ?? []).map((opt) => {
-                    const selected = active.includes(opt);
-                    return (
-                      <button
-                        key={opt}
-                        onClick={() => onChange(s.key, opt)}
-                        className={`px-2.5 py-1 text-[11px] border rounded-md transition-colors ${
-                          selected
-                            ? chipColors[s.color] + " font-medium"
-                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -952,11 +942,67 @@ export default function FindCollaborators() {
             </div>
 
             {showFilters && (
-              <FilterPanel
-                filters={activeFilters}
-                onChange={handleFilterChange}
-                onClear={clearFilters}
-              />
+              <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+                  <MultiSelect
+                    placeholder="Role"
+                    options={FILTER_OPTIONS.role}
+                    selected={activeFilters.role}
+                    onChange={(vals) => setActiveFilters((prev) => ({ ...prev, role: vals }))}
+                  />
+                  <MultiSelect
+                    placeholder="Interests"
+                    options={FILTER_OPTIONS.interests}
+                    selected={activeFilters.interests}
+                    onChange={(vals) => setActiveFilters((prev) => ({ ...prev, interests: vals }))}
+                  />
+                  <MultiSelect
+                    placeholder="Skills"
+                    options={FILTER_OPTIONS.skills}
+                    selected={activeFilters.skills}
+                    onChange={(vals) => setActiveFilters((prev) => ({ ...prev, skills: vals }))}
+                  />
+                  <MultiSelect
+                    placeholder="Location"
+                    options={FILTER_OPTIONS.location}
+                    selected={activeFilters.location}
+                    onChange={(vals) => setActiveFilters((prev) => ({ ...prev, location: vals }))}
+                  />
+                </div>
+
+                {filterCount > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 pt-3 mt-3 border-t border-gray-200">
+                    <span className="text-[11px] text-gray-500 font-medium">Active filters:</span>
+                    {activeFilters.role.map((item) => (
+                      <span key={`role-${item}`} className="px-2 py-1 bg-blue-50 text-blue-700 text-[11px] font-medium rounded-md border border-blue-200 flex items-center gap-1">
+                        {item}
+                        <button onClick={() => handleFilterChange("role", item)} className="hover:bg-blue-100 rounded"><X className="h-3 w-3" /></button>
+                      </span>
+                    ))}
+                    {activeFilters.interests.map((item) => (
+                      <span key={`interest-${item}`} className="px-2 py-1 bg-purple-50 text-purple-700 text-[11px] font-medium rounded-md border border-purple-200 flex items-center gap-1">
+                        {item}
+                        <button onClick={() => handleFilterChange("interests", item)} className="hover:bg-purple-100 rounded"><X className="h-3 w-3" /></button>
+                      </span>
+                    ))}
+                    {activeFilters.skills.map((item) => (
+                      <span key={`skill-${item}`} className="px-2 py-1 bg-orange-50 text-orange-700 text-[11px] font-medium rounded-md border border-orange-200 flex items-center gap-1">
+                        {item}
+                        <button onClick={() => handleFilterChange("skills", item)} className="hover:bg-orange-100 rounded"><X className="h-3 w-3" /></button>
+                      </span>
+                    ))}
+                    {activeFilters.location.map((item) => (
+                      <span key={`location-${item}`} className="px-2 py-1 bg-teal-50 text-teal-700 text-[11px] font-medium rounded-md border border-teal-200 flex items-center gap-1">
+                        {item}
+                        <button onClick={() => handleFilterChange("location", item)} className="hover:bg-teal-100 rounded"><X className="h-3 w-3" /></button>
+                      </span>
+                    ))}
+                    <button onClick={clearFilters} className="ml-auto text-[12px] text-gray-500 hover:text-gray-700 transition-colors">
+                      Clear all
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Empty prompt */}

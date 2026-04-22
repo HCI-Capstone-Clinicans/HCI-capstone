@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router";
 import { Header } from "../components/Header";
-import { Search, ChevronDown, MapPin, TrendingUp, X, Lock } from "lucide-react";
+import { Search, ChevronDown, MapPin, TrendingUp, X, Lock, SlidersHorizontal } from "lucide-react";
 
 const DOMAIN_OPTIONS = [
   "Cardiology", "Oncology", "Neurology", "Pediatrics", "Emergency Medicine",
@@ -435,7 +435,7 @@ export default function FindProjects() {
                     : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
                 }`}
               >
-                <ChevronDown className={`h-4 w-4 transition-transform ${showFilters ? "rotate-180" : ""}`} />
+                <SlidersHorizontal className="h-4 w-4" />
                 Filters
                 {(selectedDomains.length + selectedSkills.length + (selectedInstitution ? 1 : 0)) > 0 && (
                   <span className="ml-1 px-1.5 py-0.5 bg-white text-gray-900 text-[10px] font-bold rounded-full">
