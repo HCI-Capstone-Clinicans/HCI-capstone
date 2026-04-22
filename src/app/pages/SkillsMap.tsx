@@ -178,7 +178,7 @@ export default function SkillsMap() {
 
         {/* Main Content */}
         <div className="max-w-[1400px] mx-auto px-8 pt-4 pb-6">
-          <div className="flex gap-6 items-start">
+          <div className="flex gap-6 items-stretch">
             {/* Left Sidebar */}
             <div className="w-[240px] flex-shrink-0 space-y-4 pr-1">
               {/* Project Topics */}
@@ -249,7 +249,7 @@ export default function SkillsMap() {
 
             {/* Venn Diagram */}
             <div className="flex-1 min-h-0">
-              <div className="relative bg-white border border-gray-200 rounded-lg h-[580px] overflow-hidden">
+              <div className="relative bg-white border border-gray-200 rounded-lg h-full min-h-[580px] overflow-hidden">
                 {/* Venn Diagram Container (fills panel including header region) */}
                 <div
                   ref={containerRef}

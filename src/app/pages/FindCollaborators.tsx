@@ -389,6 +389,7 @@ export default function FindCollaborators() {
   const [browseSearching, setBrowseSearching] = useState(false);
   const [browseLoadingNames, setBrowseLoadingNames] = useState(false);
   const [browseError, setBrowseError] = useState<string | null>(null);
+  const [browseInitialized, setBrowseInitialized] = useState(false);
   const browseBatchSignal = useRef<{ cancelled: boolean }>({ cancelled: false });
   const browseInputRef = useRef<HTMLInputElement>(null);
 
@@ -397,6 +398,7 @@ export default function FindCollaborators() {
   useEffect(() => {
     const query = buildOrcidQuery(debouncedBrowseQuery, activeFilters);
     const effectiveQuery = query.trim() || "healthcare";
+    const isDefaultLoad = !query.trim();
 
     browseBatchSignal.current.cancelled = true;
     const signal = { cancelled: false };
@@ -406,6 +408,7 @@ export default function FindCollaborators() {
     setBrowseSearching(true);
     setBrowseLoadingNames(false);
     setBrowseError(null);
+    setBrowseInitialized(false);
     setBrowseProfiles({});
 
     searchOrcid(effectiveQuery)
@@ -413,7 +416,10 @@ export default function FindCollaborators() {
         if (cancelled) return;
         setBrowseResults(res);
         setBrowseSearching(false);
-        if (res.length === 0) return;
+        if (res.length === 0) {
+          setBrowseInitialized(true);
+          return;
+        }
 
         setBrowseLoadingNames(true);
         batchFetch(
@@ -429,10 +435,19 @@ export default function FindCollaborators() {
             });
           },
           signal,
-        ).finally(() => { if (!signal.cancelled) setBrowseLoadingNames(false); });
+        ).finally(() => {
+          if (!signal.cancelled) {
+            setBrowseLoadingNames(false);
+            setBrowseInitialized(true);
+          }
+        });
       })
       .catch((err) => {
-        if (!cancelled) { setBrowseError(err.message ?? "Search failed."); setBrowseSearching(false); }
+        if (!cancelled) {
+          setBrowseError(isDefaultLoad ? "Unable to load collaborators right now. Please try again." : (err.message ?? "Search failed."));
+          setBrowseSearching(false);
+          setBrowseInitialized(true);
+        }
       });
 
     return () => { cancelled = true; signal.cancelled = true; };
@@ -948,42 +963,51 @@ export default function FindCollaborators() {
               </div>
             )}
 
-            <SearchStatus
-              searching={browseSearching}
-              error={browseError}
-              query={debouncedBrowseQuery || (filterCount > 0 ? "(filters active)" : "default")}
-              results={browseRenderableResults}
-              loadingNames={browseLoadingNames}
-              resolvedCount={browseResolvedCount}
-            />
-
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-[13px] text-gray-600">
-                <span className="font-semibold text-gray-900">{browseRenderableResults.length}</span> collaborators found
-              </p>
-              <div className="flex items-center gap-2">
-                <span className="text-[12px] text-gray-500">Sort by:</span>
-                <select
-                  value={browseSortBy}
-                  onChange={(e) => setBrowseSortBy(e.target.value as "best-match" | "alphabetical")}
-                  className="text-[12px] border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="best-match">Best Match</option>
-                  <option value="alphabetical">Alphabetically</option>
-                </select>
+            {!browseInitialized ? (
+              <div className="flex items-center gap-2 text-[13px] text-gray-500 mb-4">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading collaborators...
               </div>
-            </div>
-
-            <div className="space-y-4">
-              {browseRenderableResults.map((r) => (
-                <OrcidCard
-                  key={r.orcidId}
-                  result={r}
-                  profile={browseProfiles[r.orcidId]}
-                  enriched={browseEnriched[r.orcidId]}
+            ) : (
+              <>
+                <SearchStatus
+                  searching={browseSearching}
+                  error={browseError}
+                  query={debouncedBrowseQuery || (filterCount > 0 ? "(filters active)" : "default")}
+                  results={browseRenderableResults}
+                  loadingNames={browseLoadingNames}
+                  resolvedCount={browseResolvedCount}
                 />
-              ))}
-            </div>
+
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="text-[13px] text-gray-600">
+                    <span className="font-semibold text-gray-900">{browseRenderableResults.length}</span> collaborators found
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] text-gray-500">Sort by:</span>
+                    <select
+                      value={browseSortBy}
+                      onChange={(e) => setBrowseSortBy(e.target.value as "best-match" | "alphabetical")}
+                      className="text-[12px] border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="best-match">Best Match</option>
+                      <option value="alphabetical">Alphabetically</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {browseRenderableResults.map((r) => (
+                    <OrcidCard
+                      key={r.orcidId}
+                      result={r}
+                      profile={browseProfiles[r.orcidId]}
+                      enriched={browseEnriched[r.orcidId]}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </main>
       )}
